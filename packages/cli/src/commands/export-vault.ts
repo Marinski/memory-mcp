@@ -26,13 +26,21 @@ function slugify(name: string, usedSlugs: Map<string, string>): string {
  * co-occur in the same fact — that's real relational structure, and it's
  * what gives Obsidian's graph view something worth drawing.
  *
- * Category is metadata, not a relationship, so it is NOT a wikilink: every
- * fact and every entity would otherwise link to one of only 5 category
- * pages, turning them into artificial mega-hubs that drown out the actual
- * entity structure. Category shows up as a plain heading on entity pages
- * and as a `tags:` frontmatter property instead — still visible in Graph
- * view if wanted, but toggleable independently (Filters > Tags) rather than
- * baked into the link graph.
+ * Category is metadata, not a relationship, so an entity page does NOT
+ * [[wikilink]] back to its category: ~1000 entity pages all linking back to
+ * one of only 5 category pages was what turned those 5 into catastrophic
+ * mega-hubs (in-degree in the hundreds each). Category shows up as a plain
+ * heading on entity pages and as a `tags:` frontmatter property instead —
+ * still visible in Graph view if wanted, but toggleable independently
+ * (Filters > Tags) rather than baked into the link graph.
+ *
+ * The other direction — a category page (fact.md, project.md, ...) linking
+ * OUT to the entities in its own facts — is kept as real [[wikilinks]]:
+ * that's just one page with a few hundred outgoing links, a normal table of
+ * contents, not the many-to-few fan-in that made the old design a problem.
+ * If it still clutters Graph view, exclude those 5 known paths via Filters
+ * rather than stripping the links — the pages stay just as useful to read
+ * and click through either way.
  *
  * Two entities that co-occur in only one fact are also not linked — one
  * incidental shared mention (both happen to sit in the same sentence about
@@ -68,7 +76,8 @@ export function registerExportVault(program: Command): void {
           }
         }
         const link = (entity: string) => `[[entities/${entitySlug.get(entity)}|${entity}]]`;
-        const entityPlain = (list: string[]) => (list.length ? ` _(${list.join(', ')})_` : '');
+        const entityLinks = (list: string[]) =>
+          list.length ? ` _(${list.map(link).join(', ')})_` : '';
 
         const byCategory = new Map<string, Fact[]>();
         const byEntity = new Map<string, Fact[]>();
@@ -100,11 +109,9 @@ export function registerExportVault(program: Command): void {
             : '';
 
         for (const [category, list] of byCategory) {
-          // Entity mentions are plain text here, not [[wikilinks]] — see the
-          // category-vs-relationship note above.
           const lines = [`# ${category}`, ''];
           for (const f of list) {
-            lines.push(`- ${f.statement}${entityPlain(f.entities)} <!-- fact:${f.id} source:${f.source} -->`);
+            lines.push(`- ${f.statement}${entityLinks(f.entities)} <!-- fact:${f.id} source:${f.source} -->`);
           }
           await writeFile(path.join(opts.out, `${category}.md`), lines.join('\n') + '\n');
         }
