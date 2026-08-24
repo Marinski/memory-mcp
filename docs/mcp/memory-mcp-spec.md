@@ -259,13 +259,16 @@ All five parsers → normalize → scrub → chunk → embed → upsert + ledger
 a no-op (hash dedupe); a planted fake API key in a fixture arrives in Qdrant as
 `[REDACTED:...]` and increments `secrets_found`; malformed file → quarantine, exit
 non-zero, nothing partial in stores.
-*Actual:* real-data verification done with Claude Code JSONL only (229+ sessions
+*Actual:* real-data verification done with Claude Code JSONL (229+ sessions
 across 6 devices as of this writing, growing nightly via the automated pull —
-see Decisions §3); ChatGPT/Claude/OpenCode exports not yet ingested. Surfaced
-and fixed a real bug: the embedder batched purely by text count, and litellm's
-embedding route caps total request size at 20000 characters — large batches
-failed deterministically until batching also respected a char
-budget.
+see Decisions §3) and OpenCode (94 local sessions via
+`deploy/export-opencode-sessions.py`, reading OpenCode's SQLite store
+directly and writing memory-mcp's native ingest JSON shape — 747 chunks, 15
+real secrets caught by the scrubber). ChatGPT/Claude exports not yet
+ingested. Surfaced and fixed a real bug: the embedder batched purely by text
+count, and litellm's embedding route caps total request size at 20000
+characters — large batches failed deterministically until batching also
+respected a char budget.
 
 **Step 4 — Retrieval + golden harness.** ✅ Done.
 Hybrid search, RRF fusion, `evals/` runner. Write golden.yaml from your own
@@ -364,9 +367,10 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    live: this host plus five remote hosts across three OSes, reached via a
    mix of direct LAN, WireGuard, and SSH tunnels/jump paths depending on
    what each one's network actually allows.
-4. **Source priority** — **Decided: Claude Code JSONL**, confirmed by real use —
-   229+ sessions ingested successfully across 6 devices (see Step 3).
-   ChatGPT/Claude/OpenCode exports haven't been tried yet.
+4. **Source priority** — **Decided: Claude Code JSONL first, OpenCode second**,
+   both confirmed by real use — 229+ Claude Code sessions across 6 devices,
+   plus 94 OpenCode sessions ingested from this host's local SQLite store
+   (see Step 3). ChatGPT/Claude exports haven't been tried yet.
 5. **Obsidian vault export** — **Decided: included in v1, exercised against
    real data, and scheduled.** `memoryctl export-vault` runs against
    `/srv/memory` (mounted straight through to the container), writing one
