@@ -259,11 +259,12 @@ All five parsers → normalize → scrub → chunk → embed → upsert + ledger
 a no-op (hash dedupe); a planted fake API key in a fixture arrives in Qdrant as
 `[REDACTED:...]` and increments `secrets_found`; malformed file → quarantine, exit
 non-zero, nothing partial in stores.
-*Actual:* real-data verification done with Claude Code JSONL only (41 sessions,
-2568 chunks, 4 real secrets redacted); ChatGPT/Claude/OpenCode exports not yet
-ingested. Surfaced and fixed a real bug: the embedder batched purely by text
-count, and litellm's embedding route caps total request size at 20000 characters
-— large batches failed deterministically until batching also respected a char
+*Actual:* real-data verification done with Claude Code JSONL only (229+ sessions
+across 6 devices as of this writing, growing nightly via the automated pull —
+see Decisions §3); ChatGPT/Claude/OpenCode exports not yet ingested. Surfaced
+and fixed a real bug: the embedder batched purely by text count, and litellm's
+embedding route caps total request size at 20000 characters — large batches
+failed deterministically until batching also respected a char
 budget.
 
 **Step 4 — Retrieval + golden harness.** ✅ Done.
@@ -356,10 +357,13 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    benched — no need arose once bge-m3 hit recall@5 = 1.000 on the golden set.
 2. **Postgres placement** — **Decided: local.** A dedicated Postgres 17 container
    in this compose, self-contained on the host, as built (`memory-postgres`).
-3. **Device sync** — **Open.** No automated transport is built yet. The one
-   real ingest so far (Step 3) was a one-time manual copy from this host's own
-   `~/.claude/projects` into the inbox — not the Syncthing/rsync-per-device
-   pipeline the spec describes. Needed before other devices can contribute.
+3. **Device sync** — **Decided: pull, not Syncthing.** `deploy/pull-remote-sessions.sh`
+   runs ahead of the nightly ingest, pulling from each configured device
+   over SSH (rsync for Linux/macOS, SFTP/scp for Windows — no rsync there)
+   rather than a push-based Syncthing folder per device. Six devices are
+   live: this host plus five remote hosts across three OSes, reached via a
+   mix of direct LAN, WireGuard, and SSH tunnels/jump paths depending on
+   what each one's network actually allows.
 4. **Source priority** — **Decided: Claude Code JSONL**, confirmed by real use —
    41 sessions ingested successfully (see Step 3). ChatGPT/Claude/OpenCode
    exports haven't been tried yet.
