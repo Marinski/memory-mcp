@@ -365,11 +365,15 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    mix of direct LAN, WireGuard, and SSH tunnels/jump paths depending on
    what each one's network actually allows.
 4. **Source priority** — **Decided: Claude Code JSONL**, confirmed by real use —
-   41 sessions ingested successfully (see Step 3). ChatGPT/Claude/OpenCode
-   exports haven't been tried yet.
-5. **Obsidian vault export** — **Decided: included in v1.** `memoryctl
-   export-vault` is built, though not yet exercised against real approved facts
-   since distillation hasn't run against real sessions yet (see Step 5).
+   229+ sessions ingested successfully across 6 devices (see Step 3).
+   ChatGPT/Claude/OpenCode exports haven't been tried yet.
+5. **Obsidian vault export** — **Decided: included in v1, exercised against
+   real data.** `memoryctl export-vault` runs against `/srv/memory` (mounted
+   straight through to the container), writing one markdown file per fact
+   category plus an `index.md` with wikilinks. Exported 1,214 active facts
+   and pushed them via `scp` into a `Memory/` folder inside the actual
+   Obsidian vault on Ryzen — a manual, on-demand push today, not yet
+   scheduled.
 6. **ChatGPT history cadence** — **Open.** No ChatGPT export has been ingested,
    so the manual-export cadence question hasn't come up in practice yet.
 7. **Review queue tolerance** — **Decided: review-queue-only, no auto-approve.**
