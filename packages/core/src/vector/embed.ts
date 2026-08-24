@@ -12,6 +12,30 @@ export interface Embedder {
 }
 
 const BATCH = 64;
+// litellm's embedding route caps total request size (observed: 20000 chars
+// combined across all `input` texts); stay well under that regardless of
+// the backend's exact limit.
+const MAX_BATCH_CHARS = 16000;
+
+/** Split into count- and char-budget-bounded batches (a single oversized text goes out alone). */
+function batchTexts(texts: string[]): string[][] {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let currentChars = 0;
+  for (const text of texts) {
+    const wouldExceed =
+      current.length > 0 && (current.length >= BATCH || currentChars + text.length > MAX_BATCH_CHARS);
+    if (wouldExceed) {
+      batches.push(current);
+      current = [];
+      currentChars = 0;
+    }
+    current.push(text);
+    currentChars += text.length;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
 
 export function createEmbedder(
   cfg: Pick<MemoryConfig, 'aigateBaseUrl' | 'aigateApiKey' | 'embedModel' | 'embedDims'>,
@@ -22,8 +46,7 @@ export function createEmbedder(
     model: cfg.embedModel,
     async embed(texts: string[]): Promise<number[][]> {
       const out: number[][] = [];
-      for (let i = 0; i < texts.length; i += BATCH) {
-        const batch = texts.slice(i, i + BATCH);
+      for (const batch of batchTexts(texts)) {
         const res = await fetchImpl(`${cfg.aigateBaseUrl}/embeddings`, {
           method: 'POST',
           headers: {

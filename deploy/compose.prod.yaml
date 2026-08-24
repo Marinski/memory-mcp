@@ -1,10 +1,10 @@
 # memory-mcp stack for an arm64 host. Qdrant and an OpenAI-compatible LLM
 # gateway are EXTERNAL services on their own existing docker networks —
-# referenced here, not redeclared. Replace the two `name:` fields below
-# under `networks:` with your own network names, and `qdrant`/`aigate-litellm-1`
-# hostnames in .env with your own container hostnames.
-# No GPU device requests anywhere: embeddings and distillation are network
-# calls out to your existing LLM gateway.
+# referenced here, not redeclared. Set QDRANT_NETWORK / AIGATE_NETWORK in
+# .env to your own network names, and the `qdrant`/`aigate-litellm-1`
+# hostnames used in AIGATE_BASE_URL/QDRANT_URL to your own container
+# hostnames. No GPU device requests anywhere: embeddings and distillation
+# are network calls out to your existing LLM gateway.
 
 name: memory-mcp
 
@@ -51,12 +51,12 @@ services:
 networks:
   memory: {}
   qdrant_net:
-    # replace with the docker network your existing Qdrant container runs on
-    name: qdrant_default
+    # QDRANT_NETWORK: the docker network your existing Qdrant container runs on
+    name: ${QDRANT_NETWORK:-qdrant_default}
     external: true
   aigate_net:
-    # replace with the docker network your existing LLM gateway runs on
-    name: aigate_default
+    # AIGATE_NETWORK: the docker network your existing LLM gateway runs on
+    name: ${AIGATE_NETWORK:-aigate_default}
     external: true
 
 volumes:
