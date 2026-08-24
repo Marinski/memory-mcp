@@ -1,11 +1,12 @@
-import type { Session, Turn } from '../normalize.js';
+import type { Session, SourceTool, Turn } from '../normalize.js';
 import { tidySession } from '../normalize.js';
 
 /**
- * Parses OpenCode session storage. OpenCode stores sessions as JSON with
- * message parts; exports arrive either as a single session object
- * ({id, title, messages/parts}) or an array of them. We accept both and
- * read text parts from each message.
+ * Parses OpenCode session storage, and (via the sourceTool param) VS Code's
+ * native Chat panel export — both land here as the same JSON shape
+ * ({id, title, messages/parts}), single object or array. This keeps the
+ * message-parsing logic in one place while still tagging each session with
+ * its real source for provenance/filtering downstream.
  */
 
 interface OcPart {
@@ -34,7 +35,7 @@ function msgText(m: OcMessage): string {
     .join('\n');
 }
 
-export function parseOpencode(content: string): Session[] {
+export function parseOpencode(content: string, sourceTool: SourceTool = 'opencode'): Session[] {
   const data = JSON.parse(content) as OcSession | OcSession[];
   const list = Array.isArray(data) ? data : [data];
   const sessions: Session[] = [];
@@ -50,8 +51,8 @@ export function parseOpencode(content: string): Session[] {
     }
     const project = sess.directory ? sess.directory.split('/').filter(Boolean).pop() : undefined;
     const s = tidySession({
-      id: `opencode:${sess.id}`,
-      sourceTool: 'opencode',
+      id: `${sourceTool}:${sess.id}`,
+      sourceTool,
       title: sess.title,
       project,
       startedAt: sess.time?.created,

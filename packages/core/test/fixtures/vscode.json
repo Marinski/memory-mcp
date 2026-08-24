@@ -1,0 +1,11 @@
+{
+  "source": "vscode",
+  "id": "vs-1",
+  "title": "Flip VISION_ENABLED",
+  "time": { "created": 1740000000000 },
+  "directory": "/home/algo/aigate",
+  "messages": [
+    { "role": "user", "parts": [{ "type": "text", "text": "Can you flip VISION_ENABLED on for the planner?" }], "time": { "created": 1740000000000 } },
+    { "role": "assistant", "parts": [{ "type": "text", "text": "Done — VISION_ENABLED=true, planner now calls gemma4 per page." }], "time": { "created": 1740000001000 } }
+  ]
+}

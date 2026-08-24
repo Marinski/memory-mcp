@@ -8,6 +8,7 @@ export type SourceTool =
   | 'claude'
   | 'claude-code'
   | 'opencode'
+  | 'vscode'
   | 'markdown';
 
 export interface Turn {

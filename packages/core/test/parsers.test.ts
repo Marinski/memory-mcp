@@ -57,6 +57,15 @@ describe('opencode parser', () => {
     expect(sessions[0].project).toBe('infra');
     expect(sessions[0].turns).toHaveLength(2);
   });
+
+  it('tags sourceTool per the second param (vscode reuses the same shape)', () => {
+    const sessions = parseOpencode(fx('vscode.json'), 'vscode');
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].id).toBe('vscode:vs-1');
+    expect(sessions[0].sourceTool).toBe('vscode');
+    expect(sessions[0].project).toBe('aigate');
+    expect(sessions[0].turns).toHaveLength(2);
+  });
 });
 
 describe('markdown parser', () => {
@@ -75,6 +84,7 @@ describe('detectSourceKind', () => {
     expect(detectSourceKind('/a/conversations.json', fx('chatgpt.json'))).toBe('chatgpt');
     expect(detectSourceKind('/a/export.json', fx('claude.json'))).toBe('claude');
     expect(detectSourceKind('/a/session.json', fx('opencode.json'))).toBe('opencode');
+    expect(detectSourceKind('/a/session.json', fx('vscode.json'))).toBe('vscode');
     expect(() => detectSourceKind('/a/file.bin', 'xx')).toThrow(/cannot detect/);
   });
 });

@@ -254,7 +254,8 @@ to expected boundaries (snapshot test); embed round-trip returns `EMBED_DIMS`
 vectors; a deliberately oversized code block stays intact.
 
 **Step 3 — Ingestion pipeline.** ✅ Done.
-All five parsers → normalize → scrub → chunk → embed → upsert + ledger.
+All six parsers (chatgpt, claude, claude-code, opencode, vscode, markdown) →
+normalize → scrub → chunk → embed → upsert + ledger.
 *Verify:* ingest real exports from at least 3 tools; ledger counts match; re-run is
 a no-op (hash dedupe); a planted fake API key in a fixture arrives in Qdrant as
 `[REDACTED:...]` and increments `secrets_found`; malformed file → quarantine, exit

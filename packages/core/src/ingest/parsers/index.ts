@@ -12,6 +12,7 @@ export const parsers: Record<SourceTool, Parser> = {
   claude: (c) => parseClaude(c),
   'claude-code': parseClaudeCode,
   opencode: (c) => parseOpencode(c),
+  vscode: (c) => parseOpencode(c, 'vscode'),
   markdown: parseMarkdown,
 };
 
@@ -26,6 +27,10 @@ export function detectSourceKind(sourcePath: string, content: string): SourceToo
     const head = content.slice(0, 4096);
     if (/"mapping"\s*:/.test(head) || /"current_node"\s*:/.test(head)) return 'chatgpt';
     if (/"chat_messages"\s*:/.test(head)) return 'claude';
+    // vscode's export uses the exact same {messages/parts} shape as
+    // opencode's — this marker field is the only way to tell them apart,
+    // so it must be checked before the generic opencode fallback below.
+    if (/"source"\s*:\s*"vscode"/.test(head)) return 'vscode';
     if (/"parts"\s*:/.test(head) || /"messages"\s*:/.test(head)) return 'opencode';
     // conversations.json naming disambiguates the two big exports
     if (/conversations\.json$/i.test(sourcePath)) return 'chatgpt';
