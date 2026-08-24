@@ -16,7 +16,7 @@ if [ -z "$OBSIDIAN_PUSH_HOST" ] || [ -z "$OBSIDIAN_VAULT_PATH" ]; then
   exit 0
 fi
 
-if ! compgen -G "$EXPORT_DIR/*.md" > /dev/null; then
+if [ ! -f "$EXPORT_DIR/index.md" ]; then
   echo "no export at $EXPORT_DIR, run export-vault first"
   exit 1
 fi
@@ -27,10 +27,14 @@ dest="$OBSIDIAN_VAULT_PATH/$OBSIDIAN_VAULT_SUBDIR"
 # first — ignored rather than checked.
 sftp -b - "$OBSIDIAN_PUSH_HOST" > /dev/null 2>&1 <<SFTPEOF
 mkdir "$dest"
+mkdir "$dest/entities"
 SFTPEOF
 
-if scp -q "$EXPORT_DIR"/*.md "$OBSIDIAN_PUSH_HOST:$dest/"; then
-  echo "pushed $(ls "$EXPORT_DIR"/*.md | wc -l) files to $OBSIDIAN_PUSH_HOST:$dest"
+# -r and the trailing "/." copy the export dir's *contents* (including
+# entities/) into dest, rather than nesting an extra "vault" directory.
+if scp -qr "$EXPORT_DIR/." "$OBSIDIAN_PUSH_HOST:$dest/"; then
+  n=$(find "$EXPORT_DIR" -name '*.md' | wc -l)
+  echo "pushed $n files to $OBSIDIAN_PUSH_HOST:$dest"
 else
   echo "vault push to $OBSIDIAN_PUSH_HOST failed"
   exit 1
