@@ -18,3 +18,12 @@ export { distillPending, validateProposals, type ProposedFact, type DistillDeps,
 export { pendingReviews, approveReview, rejectReview, reviewQueueCount, type ReviewItem } from './distill/review.js';
 export { remember, checkContradictions, type RememberResult } from './remember.js';
 export { memoryStats, type MemoryStats } from './stats.js';
+export {
+  findDuplicateEntities,
+  applyEntityMerges,
+  groupCandidates,
+  validateMerges,
+  type EntityMergeProposal,
+  type EntityDedupeReport,
+  type EntityDedupeFailure,
+} from './dedupe-entities.js';

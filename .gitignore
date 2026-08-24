@@ -6,3 +6,4 @@ dist/
 deploy/.env
 deploy/pull-remote-sessions.env
 .claude/
+__pycache__/
