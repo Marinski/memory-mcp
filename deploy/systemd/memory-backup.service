@@ -1,0 +1,8 @@
+[Unit]
+Description=memory-mcp nightly backup (pg_dump + Qdrant snapshot to Monster)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/memory/deploy/backup.sh

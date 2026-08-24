@@ -1,0 +1,18 @@
+# Retrieval golden set — the project's real acceptance criterion.
+#
+# WRITE THESE BY HAND from your own memorable queries BEFORE tuning anything
+# (spec section 6). Each entry: a query you would actually ask, plus the
+# session id(s) that contain the answer. Session ids use the parser prefixes,
+# e.g. "claude-code:<uuid>", "chatgpt:<conversation-id>".
+#
+# Target: 30-50 entries, recall@5 >= 0.8. The three below are seed examples
+# wired to the test fixtures so the harness itself is verifiable — replace
+# them with real queries as real exports are ingested.
+
+queries:
+  - query: "what did I decide about Klaro vs tarteaucitron"
+    expected_sessions: ["chatgpt:conv-1"]
+  - query: "FXIFY deal terms profit split"
+    expected_sessions: ["claude:abc-123"]
+  - query: "how did I fix the ext4 journal abort"
+    expected_sessions: ["claude-code:sess-cc-1"]

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "conv-1",
+    "conversation_id": "conv-1",
+    "title": "Klaro vs tarteaucitron",
+    "create_time": 1735689600,
+    "current_node": "n3",
+    "mapping": {
+      "n0": { "id": "n0", "parent": null, "message": null },
+      "n1": { "id": "n1", "parent": "n0", "message": { "author": { "role": "user" }, "content": { "content_type": "text", "parts": ["Which cookie consent tool should I use, Klaro or tarteaucitron?"] }, "create_time": 1735689601 } },
+      "n2": { "id": "n2", "parent": "n1", "message": { "author": { "role": "assistant" }, "content": { "content_type": "text", "parts": ["Klaro is lighter and easier to self-host; tarteaucitron has broader service coverage."] }, "create_time": 1735689630 } },
+      "n3": { "id": "n3", "parent": "n2", "message": { "author": { "role": "user" }, "content": { "content_type": "text", "parts": ["Decided: we go with Klaro for the trading academy site."] }, "create_time": 1735689700 } }
+    }
+  }
+]

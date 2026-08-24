@@ -1,0 +1,52 @@
+# memory-mcp stack for the GX10 (aarch64). Qdrant and aigate are EXTERNAL
+# services on the existing docker network — referenced, not redeclared.
+# No GPU device requests anywhere: embeddings and distillation are network
+# calls to the aigate/vLLM stack.
+
+name: memory-mcp
+
+services:
+  memory-postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: memory
+    volumes:
+      - memory-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [memory, aigate_default]
+
+  memory-mcp:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://memory:${POSTGRES_PASSWORD}@memory-postgres:5432/memory
+      # inside the compose network the server listens on all interfaces;
+      # the WG-only property comes from the host port binding below
+      LISTEN: 0.0.0.0:7105
+    ports:
+      # WG-only bind: LISTEN_HOST is the GX10's WG address (10.8.0.x)
+      - "${LISTEN_HOST:-10.8.0.1}:7105:7105"
+    volumes:
+      - /srv/memory:/srv/memory
+    depends_on:
+      memory-postgres:
+        condition: service_healthy
+    networks: [memory, aigate_default]
+
+networks:
+  memory: {}
+  aigate_default:
+    external: true
+
+volumes:
+  memory-pgdata: {}

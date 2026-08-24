@@ -1,0 +1,16 @@
+{
+  "name": "@memory/evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "eval": "tsc && node build/run.js",
+    "test": "echo 'evals run against live stores via pnpm eval'",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@memory/core": "workspace:*",
+    "yaml": "^2.6.0"
+  }
+}

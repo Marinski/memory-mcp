@@ -1,0 +1,22 @@
+{
+  "name": "@memory/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": {
+    ".": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && mkdir -p build/db && cp src/db/schema.sql build/db/",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0"
+  }
+}

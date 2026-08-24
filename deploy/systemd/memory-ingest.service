@@ -1,0 +1,10 @@
+[Unit]
+Description=memory-mcp daily ingest + distill
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/memory/deploy
+ExecStart=/usr/bin/docker compose -f compose.gx10.yaml exec -T memory-mcp memoryctl ingest
+ExecStart=/usr/bin/docker compose -f compose.gx10.yaml exec -T memory-mcp memoryctl distill

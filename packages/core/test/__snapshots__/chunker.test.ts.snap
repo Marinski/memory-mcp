@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`chunkSession > is deterministic (snapshot) 1`] = `
+[
+  {
+    "index": 0,
+    "text": "user: How do I configure the WireGuard peer?
+
+assistant: Add the peer block to wg0.conf and restart the interface.
+
+\`\`\`ini
+[Peer]
+AllowedIPs = 10.8.0.4/32
+\`\`\`
+
+user: Great, and the DNS?
+
+assistant: Point it at the WG gateway resolver.",
+    "turnRange": "0-3",
+  },
+]
+`;

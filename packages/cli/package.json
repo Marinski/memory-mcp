@@ -1,0 +1,16 @@
+{
+  "name": "@memory/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "memoryctl": "./build/index.js" },
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js','755')\"",
+    "test": "echo 'no cli-specific tests (logic lives in @memory/core)'",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@memory/core": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}

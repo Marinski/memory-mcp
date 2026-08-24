@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`memory-mcp surface > tools/list snapshot — four tools with stable names and schemas 1`] = `
+[
+  {
+    "inputProps": [
+      "confirm",
+      "fact_id",
+      "query",
+    ],
+    "name": "forget",
+  },
+  {
+    "inputProps": [
+      "category",
+      "entities",
+      "statement",
+    ],
+    "name": "remember",
+  },
+  {
+    "inputProps": [
+      "after",
+      "before",
+      "limit",
+      "project",
+      "query",
+      "source_tool",
+    ],
+    "name": "search_archive",
+  },
+  {
+    "inputProps": [
+      "category",
+      "limit",
+      "query",
+    ],
+    "name": "search_memory",
+  },
+]
+`;

@@ -1,0 +1,10 @@
+{
+  "id": "oc-1",
+  "title": "WireGuard setup",
+  "time": { "created": 1740000000000 },
+  "directory": "/home/algo/infra",
+  "messages": [
+    { "role": "user", "parts": [{ "type": "text", "text": "Set up the WG peer for the workstation." }], "time": { "created": 1740000000000 } },
+    { "role": "assistant", "parts": [{ "type": "text", "text": "Added peer with allowed IPs 10.8.0.4/32 on wg0." }], "time": { "created": 1740000001000 } }
+  ]
+}

@@ -1,0 +1,5 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-08-23T15:30:01.836Z","sessionId":"sess-cc-1","content":"ignored"}
+{"parentUuid":null,"isSidechain":false,"type":"user","cwd":"/home/algo/backtest-manager","sessionId":"sess-cc-1","message":{"role":"user","content":"How did I fix the ext4 journal abort on the GX10?"},"uuid":"u1","timestamp":"2026-08-23T15:30:01.848Z"}
+{"parentUuid":"u1","isSidechain":false,"type":"assistant","sessionId":"sess-cc-1","message":{"role":"assistant","content":[{"type":"text","text":"You remounted read-only, ran e2fsck -fy, and replaced the failing NVMe cable."}]},"uuid":"a1","timestamp":"2026-08-23T15:30:10.000Z"}
+{"parentUuid":"a1","isSidechain":true,"type":"user","sessionId":"sess-cc-1","message":{"role":"user","content":"sidechain noise"},"uuid":"u2","timestamp":"2026-08-23T15:30:11.000Z"}
+{"type":"attachment","attachment":{"type":"hook_success"},"uuid":"at1","timestamp":"2026-08-23T15:30:12.000Z"}

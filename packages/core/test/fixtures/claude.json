@@ -1,0 +1,11 @@
+[
+  {
+    "uuid": "abc-123",
+    "name": "FXIFY deal terms",
+    "created_at": "2025-03-01T10:00:00Z",
+    "chat_messages": [
+      { "sender": "human", "text": "Summarize the FXIFY deal terms we agreed on.", "created_at": "2025-03-01T10:00:01Z" },
+      { "sender": "assistant", "text": "FXIFY: 80/20 profit split, monthly payouts, max 10% drawdown.", "created_at": "2025-03-01T10:00:20Z" }
+    ]
+  }
+]
