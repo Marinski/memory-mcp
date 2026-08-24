@@ -52,18 +52,31 @@ export interface DistillDeps {
   getSessionChunks: (sessionId: string) => Promise<string[]>;
 }
 
+export interface DistillFailure {
+  sessionId: string;
+  error: string;
+}
+
 export interface DistillReport {
   sessionsProcessed: number;
   proposals: number;
+  failures: DistillFailure[];
 }
 
 const MAX_TRANSCRIPT_CHARS = 48_000; // ~12k tokens fits gemma's 16k window
 
+/**
+ * Walks un-distilled ledger entries. A single session whose LLM response
+ * can't be parsed (temperature:0, so a retry wouldn't help) is recorded as a
+ * failure and skipped rather than aborting every other session in the run —
+ * same reasoning as the ingest pipeline's quarantine-vs-abort split.
+ */
 export async function distillPending(deps: DistillDeps): Promise<DistillReport> {
   const { pool, llm, getSessionChunks } = deps;
   const entries = await undistilledLedgerEntries(pool);
   let sessionsProcessed = 0;
   let proposals = 0;
+  const failures: DistillFailure[] = [];
 
   for (const entry of entries) {
     const sessionIds = await ledgerSessionIds(pool, entry.id);
@@ -71,21 +84,28 @@ export async function distillPending(deps: DistillDeps): Promise<DistillReport> 
       const chunks = await getSessionChunks(sid);
       if (chunks.length === 0) continue;
       const transcript = chunks.join('\n\n').slice(0, MAX_TRANSCRIPT_CHARS);
-      const response = await llm.complete(
-        SYSTEM,
-        `<transcript>\n${transcript}\n</transcript>`,
-      );
-      const facts = validateProposals(extractJson(response));
-      for (const f of facts) {
-        await pool.query(
-          `INSERT INTO review_queue (proposed_fact, session_ref) VALUES ($1::jsonb, $2)`,
-          [JSON.stringify(f), sid],
+      try {
+        const response = await llm.complete(
+          SYSTEM,
+          `<transcript>\n${transcript}\n</transcript>`,
         );
-        proposals += 1;
+        const facts = validateProposals(extractJson(response));
+        for (const f of facts) {
+          await pool.query(
+            `INSERT INTO review_queue (proposed_fact, session_ref) VALUES ($1::jsonb, $2)`,
+            [JSON.stringify(f), sid],
+          );
+          proposals += 1;
+        }
+        sessionsProcessed += 1;
+      } catch (err) {
+        failures.push({ sessionId: sid, error: err instanceof Error ? err.message : String(err) });
       }
-      sessionsProcessed += 1;
     }
+    // Mark distilled regardless of failure: at temperature:0 a re-run
+    // reproduces the same unparseable response, so retrying gains nothing —
+    // surfacing it in `failures` is the actionable outcome, not a retry loop.
     await markDistilled(pool, entry.id);
   }
-  return { sessionsProcessed, proposals };
+  return { sessionsProcessed, proposals, failures };
 }

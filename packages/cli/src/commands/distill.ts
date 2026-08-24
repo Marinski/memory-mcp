@@ -20,6 +20,11 @@ export function registerDistill(program: Command): void {
         console.log(`sessions processed: ${report.sessionsProcessed}`);
         console.log(`fact candidates queued for review: ${report.proposals}`);
         if (report.proposals > 0) console.log(`run 'memoryctl review' to approve/reject`);
+        if (report.failures.length > 0) {
+          console.log(`\nsessions that failed extraction (unparseable LLM response, not retried):`);
+          for (const f of report.failures) console.log(`  ${f.sessionId}: ${f.error}`);
+          process.exitCode = 1;
+        }
       } finally {
         await ctx.pool.end();
       }
