@@ -1,18 +1,41 @@
 # Retrieval golden set — the project's real acceptance criterion.
 #
-# WRITE THESE BY HAND from your own memorable queries BEFORE tuning anything
-# (spec section 6). Each entry: a query you would actually ask, plus the
-# session id(s) that contain the answer. Session ids use the parser prefixes,
-# e.g. "claude-code:<uuid>", "chatgpt:<conversation-id>".
-#
-# Target: 30-50 entries, recall@5 >= 0.8. The three below are seed examples
-# wired to the test fixtures so the harness itself is verifiable — replace
-# them with real queries as real exports are ingested.
+# Written from real ingested Claude Code sessions (2026-08-24). Query
+# phrasing is genericized where the underlying session touched business
+# specifics (domain names, product/tool names) — this file is public.
+# Session ids use the parser prefixes, e.g. "claude-code:<uuid>",
+# "markdown:<slug>:<hash>". Target: 30-50 entries, recall@5 >= 0.8 — add
+# more as new sessions get ingested.
 
 queries:
-  - query: "what did I decide about Klaro vs tarteaucitron"
-    expected_sessions: ["chatgpt:conv-1"]
-  - query: "FXIFY deal terms profit split"
-    expected_sessions: ["claude:abc-123"]
-  - query: "how did I fix the ext4 journal abort"
-    expected_sessions: ["claude-code:sess-cc-1"]
+  - query: "setting up cluster mode between two arm64 hosts over a high-speed NIC"
+    expected_sessions: ["claude-code:9285fdbb-89fa-4573-a395-e693b32d9b00"]
+  - query: "why was the LLM gateway serving the wrong model when it was already running on the worker node"
+    expected_sessions: ["claude-code:756c1cf8-ab64-45e6-ba23-748da003679e"]
+  - query: "implementing the weekend agent pipeline plan"
+    expected_sessions: ["claude-code:e4a104de-0518-4c84-95ef-1ed48d8041ab"]
+  - query: "fixing the hostname for a marketing funnel data collector"
+    expected_sessions: ["claude-code:c387e7a6-da00-4104-a58c-d12f8bae5c2b"]
+  - query: "cleaning up old .bak files and pycache in my Documents folder"
+    expected_sessions: ["claude-code:9c218212-c624-4e47-a528-f32c88ef1ab8"]
+  - query: "implementing the memory-mcp spec from scratch"
+    expected_sessions: ["claude-code:c9426f13-4ae2-4358-ad50-6b8923ff63b9"]
+  - query: "mcp-server-builder handoff notes about infrastructure gaps"
+    expected_sessions: ["claude-code:1407b3c1-e0e3-4c04-b35f-3e8ddec61749"]
+  - query: "building an accounting report from a website orders export"
+    expected_sessions: ["claude-code:67e85a0c-3586-4433-8425-6b25f32be285"]
+  - query: "deciding whether an internal ops toolchain belongs in the same database as a customer-facing product"
+    expected_sessions: ["claude-code:3df71fe1-f923-426c-9cbc-7c4ffbc75417"]
+  - query: "getting youtube transcripts and debugging what's wrong"
+    expected_sessions: ["claude-code:a863763d-7f10-4304-8cb1-aea9800d7abe"]
+  - query: "images missing alt attributes in the SEO automation publish pipeline"
+    expected_sessions: ["claude-code:4dbad299-14bd-4d9e-b067-9181e970c328"]
+  - query: "designing the MCP tool surface for Backtest Manager"
+    expected_sessions:
+      ["claude-code:62598ca3-c590-4b9a-a48a-c9f063fba40b", "claude-code:2fe02779-6551-4c47-85f0-1c57361cb623", "claude-code:d30559ed-b3aa-4611-93f3-926aa6fbb2c4"]
+  - query: "gotchas when renaming or upgrading LLM gateway models"
+    expected_sessions: ["markdown:aigate-model-serving-gotchas:d477e47b796c"]
+  - query: "which translation model won the benchmark, gemma or qwen"
+    expected_sessions: ["markdown:translation-model-benchmark:4b2162bba437"]
+  - query: "host pkill accidentally killing processes inside containers"
+    expected_sessions: ["markdown:pkill-hits-containers:a2877a05e57b"]
