@@ -262,12 +262,17 @@ a no-op (hash dedupe); a planted fake API key in a fixture arrives in Qdrant as
 non-zero, nothing partial in stores.
 *Actual:* real-data verification done with Claude Code JSONL (229+ sessions
 across 6 devices as of this writing, growing nightly via the automated pull —
-see Decisions §3) and OpenCode (94 local sessions via
+see Decisions §3), OpenCode (94 local sessions via
 `deploy/export-opencode-sessions.py`, reading OpenCode's SQLite store
 directly and writing memory-mcp's native ingest JSON shape — 747 chunks, 15
-real secrets caught by the scrubber). ChatGPT/Claude exports not yet
-ingested. Surfaced and fixed a real bug: the embedder batched purely by text
-count, and litellm's embedding route caps total request size at 20000
+real secrets caught by the scrubber), and VS Code's native Chat panel (5
+local sessions via `deploy/export-vscode-sessions.py`, same pattern against
+VS Code Server's global session-store.db — 159 chunks, 2 real secrets
+caught). VS Code's export shape is identical to OpenCode's, so a real
+`vscode` SourceTool was added and `parseOpencode` parameterized rather than
+mislabeling provenance. ChatGPT/Claude exports not yet ingested. Surfaced
+and fixed a real bug: the embedder batched purely by text count, and
+litellm's embedding route caps total request size at 20000
 characters — large batches failed deterministically until batching also
 respected a char budget.
 
@@ -368,10 +373,11 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    live: this host plus five remote hosts across three OSes, reached via a
    mix of direct LAN, WireGuard, and SSH tunnels/jump paths depending on
    what each one's network actually allows.
-4. **Source priority** — **Decided: Claude Code JSONL first, OpenCode second**,
-   both confirmed by real use — 229+ Claude Code sessions across 6 devices,
-   plus 94 OpenCode sessions ingested from this host's local SQLite store
-   (see Step 3). ChatGPT/Claude exports haven't been tried yet.
+4. **Source priority** — **Decided: Claude Code JSONL, OpenCode, VS Code Chat
+   panel**, all three confirmed by real use — 229+ Claude Code sessions
+   across 6 devices, 94 OpenCode sessions, and 5 VS Code sessions, all
+   ingested from this host's local SQLite stores (see Step 3). ChatGPT/
+   Claude exports haven't been tried yet.
 5. **Obsidian vault export** — **Decided: included in v1, exercised against
    real data, and scheduled.** `memoryctl export-vault` runs against
    `/srv/memory` (mounted straight through to the container), writing one
