@@ -6,7 +6,12 @@ After=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/srv/memory/deploy
-# '-' prefix: a quarantined/failed file must not skip the distill pass;
-# ingest's own output/ledger records the failure for inspection.
+# Optional: config for pull-remote-sessions.sh (host list, path overrides).
+# Skips silently if this file doesn't exist — remote pull is opt-in.
+EnvironmentFile=-/srv/memory/deploy/pull-remote-sessions.env
+# '-' prefix on all three: one bad host/file must not skip ingest/distill
+# for everything else — pull's own output and ingest's ledger record any
+# per-host or per-file failure for inspection.
+ExecStart=-/srv/memory/deploy/pull-remote-sessions.sh
 ExecStart=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl ingest
 ExecStart=/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl distill
