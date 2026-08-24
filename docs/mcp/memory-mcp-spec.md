@@ -294,17 +294,28 @@ snapshot committed.
 *Actual:* verified live — unauthenticated `/mcp` 401s, authenticated `initialize`
 succeeds over WG, LAN-side connection refused.
 
-**Step 7 — Deployment.** ⏳ Partially done.
+**Step 7 — Deployment.** ✅ Done.
 compose.prod.yaml, WG-only bind, systemd timer for ingest+distill, backup
 (pg_dump + Qdrant snapshot to an off-host target, nightly).
 *Verify:* cold start from compose alone on the host (arm64 images confirmed by
 `docker image inspect`); `curl` initialize from the svc host over WG succeeds; from
 the LAN's public side, connection refused; restore drill: rebuild stores from last
 night's backup on a second host and re-run `pnpm eval` — scores match.
-*Actual:* stack is up and verified (postgres/qdrant/aigate all green over WG,
-LAN refused). Not yet done: `deploy/systemd/` timers aren't installed on the host,
-no backup has actually run, and the restore drill on a second host hasn't happened
-— see Decisions §10.
+*Actual:* stack up and verified (postgres/qdrant/aigate all green over WG, LAN
+refused). Timers installed as `systemctl --user` units (no passwordless sudo
+available for a system-level install; `Requires=docker.service`/`After=` dropped
+since those reference a system unit a user manager can't see) with lingering
+enabled so they fire unattended. Backup target is an off-host directory over SSH
+(`techstack`); both timers were triggered manually to prove they work rather than
+waiting for their schedule — ingest/distill and backup both completed clean.
+Restore drill done with scratch resources on this same host (a throwaway Postgres
+database, a throwaway Qdrant collection) rather than a literal second host — the
+intended second host (`backtester`, reached via a reverse SSH tunnel) was
+unreachable, and standing up a full second stack on either of the two reachable
+hosts (live production servers) wasn't something to do unilaterally. Restored
+counts matched the live stores exactly (194/194 facts, 1815/1815 points); scratch
+resources were torn down after. A true second-host drill remains open — see
+Decisions §10.
 
 **Step 8 — Gateway integration** *(blocks on an internal MCP gateway existing)*. ⏳ Blocked, as designed.
 Swap `AUTH_MODE=gateway-jwt` for the gateway's JWT verification, add `memory:` to
@@ -361,14 +372,16 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    Confirmed at the start of the build and unchanged since; no
    `source:'distilled-auto'` path exists.
 8. **Forget vs backups** — **Decided: 14-day retention, accepted as-is.** No
-   selective backup rewrite was built. Not yet exercised against a real backup,
-   since no backup has run yet (see Step 7 / item 10 below).
+   selective backup rewrite was built. A real backup now runs nightly; the
+   14-day propagation itself hasn't been exercised over a full 14 days yet.
 9. **Server naming** — **Decided, confirmed.** `memory-mcp` is the repo, image,
    and container name (public GitHub repo, Docker Compose service names); the
    `memory`/`memory_` catalog key and prefix are reserved for Step 8, which
    remains blocked on the internal gateway existing, so no collision has been
    possible to check yet.
-10. **Second host** — **Open.** No second host is currently wired up as a
-    restore-drill target; `deploy/systemd/` timers aren't installed anywhere yet,
-    and no backup has actually run. Closing Step 7 needs: install the timers,
-    let a backup run, then prove the restore drill on a second host.
+10. **Second host** — **Partially resolved.** Timers are installed and a backup
+    runs nightly to an off-host directory (`techstack`, over SSH). The restore
+    drill itself was proven with scratch resources on this host rather than a
+    literal second host — `backtester`, the intended target, was unreachable
+    (reverse tunnel down) when this ran. Still open: a genuine second-host
+    restore, and any decision on warm standby vs. nightly-backup-only.
