@@ -1,5 +1,7 @@
 # memory-mcp stack for the GX10 (aarch64). Qdrant and aigate are EXTERNAL
-# services on the existing docker network — referenced, not redeclared.
+# services on their existing docker networks — referenced, not redeclared:
+#   qdrant           -> network litellm-config_default (hostname 'qdrant')
+#   aigate litellm   -> network aigate_aigate-public   (hostname 'aigate-litellm-1')
 # No GPU device requests anywhere: embeddings and distillation are network
 # calls to the aigate/vLLM stack.
 
@@ -20,7 +22,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [memory, aigate_default]
+    # internal network only — the memory DB is not reachable from the
+    # aigate/qdrant networks
+    networks: [memory]
 
   memory-mcp:
     build:
@@ -41,11 +45,15 @@ services:
     depends_on:
       memory-postgres:
         condition: service_healthy
-    networks: [memory, aigate_default]
+    networks: [memory, qdrant_net, aigate_net]
 
 networks:
   memory: {}
-  aigate_default:
+  qdrant_net:
+    name: litellm-config_default
+    external: true
+  aigate_net:
+    name: aigate_aigate-public
     external: true
 
 volumes:

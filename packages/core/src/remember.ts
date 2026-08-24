@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { createFact, findSupersedeCandidates, markSuperseded, type Fact, type FactCategory } from './db/facts.js';
 import type { LlmClient } from './distill/llm.js';
 import { extractJson } from './distill/llm.js';
+import { redactWithRules } from './ingest/scrub.js';
 
 /**
  * remember: writes an active fact with source 'user', confidence 1.0.
@@ -50,17 +51,32 @@ export async function remember(
 ): Promise<RememberResult> {
   const category = input.category ?? 'fact';
   const entities = input.entities ?? [];
+  // Scrubbing runs before anything is stored — a pasted secret must not
+  // land in the facts table, memory://facts/recent, or the vault export.
+  const { text: statement } = redactWithRules(input.statement);
   const candidates = await findSupersedeCandidates(pool, category, entities);
-  const contradicted = await checkContradictions(llm, input.statement, candidates);
-  const fact = await createFact(pool, {
-    statement: input.statement,
-    category,
-    entities,
-    confidence: 1.0,
-    source: 'user',
-  });
-  for (const oldId of contradicted) {
-    await markSuperseded(pool, oldId, fact.id);
+  const contradicted = await checkContradictions(llm, statement, candidates);
+  // Insert + supersede marks are one transaction so a crash cannot leave a
+  // new fact active alongside the contradicted ones un-superseded.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const fact = await createFact(client, {
+      statement,
+      category,
+      entities,
+      confidence: 1.0,
+      source: 'user',
+    });
+    for (const oldId of contradicted) {
+      await markSuperseded(client, oldId, fact.id);
+    }
+    await client.query('COMMIT');
+    return { fact, superseded: contradicted };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
   }
-  return { fact, superseded: contradicted };
 }

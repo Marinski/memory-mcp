@@ -35,11 +35,31 @@ export function createLlmClient(
   };
 }
 
-/** Extract the first JSON value from an LLM response (tolerates fences). */
+/**
+ * Extract the first JSON value from an LLM response. Tolerates code fences
+ * and trailing prose by scanning to the matching close bracket.
+ */
 export function extractJson<T>(text: string): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1] : text;
   const start = candidate.search(/[[{]/);
   if (start === -1) throw new Error('no JSON found in LLM response');
-  return JSON.parse(candidate.slice(start)) as T;
+  const open = candidate[start];
+  const close = open === '[' ? ']' : '}';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) return JSON.parse(candidate.slice(start, i + 1)) as T;
+    }
+  }
+  throw new Error('unbalanced JSON in LLM response');
 }

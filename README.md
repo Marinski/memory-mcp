@@ -60,7 +60,10 @@ out of backups within that window.
 
 - WG-only bind, static bearer (v1); gateway JWT lands with ats-mcp-platform Step 8.
 - Scrubbing (gitleaks + custom regexes) is **fail-closed** and runs before
-  anything is embedded or stored; failures quarantine the whole file.
+  anything is embedded or stored. Unparseable input quarantines the whole
+  file (recorded in the ledger); transient infrastructure failures (embedder,
+  Qdrant, gitleaks unavailable) roll back cleanly, record nothing, and the
+  file is retried on the next run.
 - `forget` is a hard delete in both stores.
 - Archive chunks are returned inside untrusted-data delimiters — historical
   transcripts can contain instruction-like text and must be treated as data.

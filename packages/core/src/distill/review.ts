@@ -35,16 +35,28 @@ export async function approveReview(
   if (res.rowCount === 0) return null;
   const proposed = res.rows[0].proposed_fact as ProposedFact;
   const sessionRef = res.rows[0].session_ref as string;
-  const fact = await createFact(pool, {
-    statement: edited?.statement ?? proposed.statement,
-    category: edited?.category ?? proposed.category,
-    entities: edited?.entities ?? proposed.entities,
-    confidence: edited?.confidence ?? proposed.confidence,
-    source: 'distilled',
-    provenance: [{ session_id: sessionRef }],
-  });
-  await pool.query(`UPDATE review_queue SET resolved = 'approved' WHERE id = $1`, [reviewId]);
-  return fact;
+  // Fact creation and queue resolution are one transaction — a crash
+  // between them must not leave a re-approvable item that would duplicate.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const fact = await createFact(client, {
+      statement: edited?.statement ?? proposed.statement,
+      category: edited?.category ?? proposed.category,
+      entities: edited?.entities ?? proposed.entities,
+      confidence: edited?.confidence ?? proposed.confidence,
+      source: 'distilled',
+      provenance: [{ session_id: sessionRef }],
+    });
+    await client.query(`UPDATE review_queue SET resolved = 'approved' WHERE id = $1`, [reviewId]);
+    await client.query('COMMIT');
+    return fact;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function rejectReview(pool: Pool, reviewId: string): Promise<boolean> {

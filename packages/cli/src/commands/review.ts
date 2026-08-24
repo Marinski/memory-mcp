@@ -38,9 +38,13 @@ export function registerReview(program: Command): void {
             const statement = (await rl.question(`  statement [${f.statement}]: `)).trim();
             const category = (await rl.question(`  category [${f.category}]: `)).trim();
             const entities = (await rl.question(`  entities csv [${f.entities.join(',')}]: `)).trim();
+            const VALID = ['preference', 'decision', 'fact', 'project', 'person'];
+            if (category && !VALID.includes(category)) {
+              console.log(`  invalid category '${category}' (valid: ${VALID.join(', ')}) — keeping '${f.category}'`);
+            }
             edited = {
               ...(statement ? { statement } : {}),
-              ...(category ? { category: category as ProposedFact['category'] } : {}),
+              ...(category && VALID.includes(category) ? { category: category as ProposedFact['category'] } : {}),
               ...(entities ? { entities: entities.split(',').map((e) => e.trim()).filter(Boolean) } : {}),
             };
           }

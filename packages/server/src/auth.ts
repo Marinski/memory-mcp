@@ -33,7 +33,8 @@ export function checkStaticBearer(expected: string, provided: string | null): bo
 export function authMiddleware(cfg: MemoryConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const token = bearerToken(req.headers.authorization);
-    if (!checkStaticBearer(cfg.staticBearer as string, token)) {
+    // Fail closed: a missing configured bearer can never authorize anyone.
+    if (!cfg.staticBearer || !checkStaticBearer(cfg.staticBearer, token)) {
       res.status(401).json({
         jsonrpc: '2.0',
         error: { code: -32001, message: 'Unauthorized' },

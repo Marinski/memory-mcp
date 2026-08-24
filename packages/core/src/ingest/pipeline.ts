@@ -14,9 +14,18 @@ import { ledgerHasHash, recordIngest } from '../db/ledger.js';
 
 /**
  * parse -> normalize -> scrub (fail-closed) -> chunk -> embed -> upsert +
- * ledger. A file either fully ingests or fully quarantines; the ledger's
- * content-hash unique key makes re-runs no-ops.
+ * ledger. Outcomes:
+ *  - 'ingested'    fully processed; ledger row makes re-runs no-ops
+ *  - 'skipped'     content hash already in the ledger
+ *  - 'quarantined' bad INPUT (unparseable / empty) — recorded in the ledger
+ *                  so the identical file never re-processes
+ *  - 'failed'      transient INFRASTRUCTURE error (embedder, Qdrant,
+ *                  gitleaks) — nothing recorded, any upserted points rolled
+ *                  back, the file stays in place so the next run retries it
  */
+
+/** Bad input — quarantine. Everything else is treated as transient. */
+class QuarantineError extends Error {}
 
 export interface IngestDeps {
   pool: Pool;
@@ -27,7 +36,7 @@ export interface IngestDeps {
 
 export interface IngestFileResult {
   file: string;
-  status: 'ingested' | 'skipped' | 'quarantined';
+  status: 'ingested' | 'skipped' | 'quarantined' | 'failed';
   sessions: number;
   chunks: number;
   secretsFound: number;
@@ -48,11 +57,28 @@ export async function ingestFile(
   }
 
   const upsertedSessions: string[] = [];
+  let sessions;
   try {
     const kind = detectSourceKind(filePath, raw);
-    const sessions = parsers[kind](raw, filePath).map((s) => (device ? { ...s, device } : s));
+    sessions = parsers[kind](raw, filePath).map((s) => (device ? { ...s, device } : s));
     if (sessions.length === 0) throw new Error('no sessions parsed from file');
+  } catch (err) {
+    // Parse/detect failures are bad input: quarantine and remember the hash.
+    const msg = err instanceof Error ? err.message : String(err);
+    await recordIngest(pool, {
+      source_path: filePath,
+      source_kind: 'unknown',
+      content_hash: contentHash,
+      sessions: 0,
+      chunks: 0,
+      secrets_found: 0,
+      status: 'quarantined',
+      sessionIds: [],
+    });
+    return { file: filePath, status: 'quarantined', sessions: 0, chunks: 0, secretsFound: 0, error: msg };
+  }
 
+  try {
     let totalChunks = 0;
     let totalSecrets = 0;
     const sessionIds: string[] = [];
@@ -74,7 +100,9 @@ export async function ingestFile(
           text: c.text,
           content_hash: contentHash,
         };
-        return { id: chunkPointId(`${contentHash}:${clean.id}`, c.index), dense: vectors[i], sparse: sparseVector(c.text), payload };
+        // Point id = f(session_id, chunk_index): a cumulative re-export of the
+        // same session overwrites its own points instead of duplicating them.
+        return { id: chunkPointId(clean.id, c.index), dense: vectors[i], sparse: sparseVector(c.text), payload };
       });
       await qdrant.upsert(points);
       upsertedSessions.push(clean.id);
@@ -94,23 +122,15 @@ export async function ingestFile(
     });
     return { file: filePath, status: 'ingested', sessions: sessions.length, chunks: totalChunks, secretsFound: totalSecrets };
   } catch (err) {
-    // Quarantine: nothing partial may remain queryable — roll back any
-    // sessions whose points already landed in Qdrant before the failure.
+    // Transient infrastructure failure (embedder / Qdrant / gitleaks):
+    // nothing partial may remain queryable — roll back sessions whose
+    // points already landed, record NOTHING in the ledger, and leave the
+    // file where it is so the next run retries it.
     const msg = err instanceof Error ? err.message : String(err);
     for (const sid of upsertedSessions) {
       await deps.qdrant.deleteBySession(sid).catch(() => undefined);
     }
-    await recordIngest(pool, {
-      source_path: filePath,
-      source_kind: 'unknown',
-      content_hash: contentHash,
-      sessions: 0,
-      chunks: 0,
-      secrets_found: 0,
-      status: 'quarantined',
-      sessionIds: [],
-    }).catch(() => undefined);
-    return { file: filePath, status: 'quarantined', sessions: 0, chunks: 0, secretsFound: 0, error: msg };
+    return { file: filePath, status: 'failed', sessions: 0, chunks: 0, secretsFound: 0, error: msg };
   }
 }
 
@@ -140,11 +160,12 @@ export async function ingestInbox(deps: IngestDeps): Promise<IngestFileResult[]>
         const dest = path.join(archiveDir, rel);
         await mkdir(path.dirname(dest), { recursive: true });
         await rename(file, dest);
-      } else {
+      } else if (res.status === 'quarantined') {
         const dest = path.join(quarantineDir, rel);
         await mkdir(path.dirname(dest), { recursive: true });
         await rename(file, dest);
       }
+      // 'failed' (transient): file stays in the inbox for the next run
     }
   }
   return results;

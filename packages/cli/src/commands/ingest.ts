@@ -15,14 +15,14 @@ export function registerIngest(program: Command): void {
         const results = opts.file
           ? [await ingestFile(deps, opts.file, opts.device)]
           : await ingestInbox(deps);
-        let quarantined = 0;
+        let bad = 0;
         for (const r of results) {
           const extra = r.error ? ` — ${r.error}` : '';
           console.log(`${r.status.padEnd(11)} ${r.file} (sessions=${r.sessions} chunks=${r.chunks} secrets=${r.secretsFound})${extra}`);
-          if (r.status === 'quarantined') quarantined += 1;
+          if (r.status === 'quarantined' || r.status === 'failed') bad += 1;
         }
         if (results.length === 0) console.log('inbox empty — nothing to do');
-        if (quarantined > 0) process.exit(1);
+        if (bad > 0) process.exit(1);
       } finally {
         await ctx.pool.end();
       }

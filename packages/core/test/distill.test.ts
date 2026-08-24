@@ -11,6 +11,11 @@ describe('extractJson', () => {
     expect(extractJson('Here you go:\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(() => extractJson('no json here')).toThrow();
   });
+
+  it('tolerates trailing prose and strings containing brackets', () => {
+    expect(extractJson('Sure! [1,2] hope that helps')).toEqual([1, 2]);
+    expect(extractJson('{"a":"has ] and } inside"} trailing words')).toEqual({ a: 'has ] and } inside' });
+  });
 });
 
 describe('validateProposals', () => {

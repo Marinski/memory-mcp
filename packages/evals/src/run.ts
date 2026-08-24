@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import {
   loadConfig,
-  createPool,
   createQdrantClient,
   createEmbedder,
   searchArchive,
@@ -26,11 +25,10 @@ const RECALL_TARGET = 0.8;
 
 async function main(): Promise<void> {
   const dir = path.dirname(fileURLToPath(import.meta.url));
-  const goldenPath = path.resolve(dir, '..', '..', 'golden.yaml');
+  const goldenPath = path.resolve(dir, '..', 'golden.yaml'); // build/run.js -> packages/evals/golden.yaml
   const golden = parse(readFileSync(goldenPath, 'utf8')) as { queries: GoldenQuery[] };
 
   const cfg = loadConfig();
-  const pool = createPool(cfg.databaseUrl);
   const qdrant = createQdrantClient(cfg.qdrantUrl, cfg.qdrantCollection, cfg.embedDims);
   const embedder = createEmbedder(cfg);
 
@@ -68,7 +66,6 @@ async function main(): Promise<void> {
     for (const m of misses) console.log(`  - ${m}`);
   }
 
-  await pool.end();
   if (recall < RECALL_TARGET) {
     console.error(`\nrecall@${K} below target — tune chunking/fusion or document unreachable queries in golden.yaml`);
     process.exit(1);

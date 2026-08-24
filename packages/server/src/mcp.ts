@@ -15,6 +15,9 @@ import {
 import type { ServerDeps } from './deps.js';
 
 const CATEGORY = z.enum(['preference', 'decision', 'fact', 'project', 'person']);
+const ISO_DATE = z
+  .string()
+  .refine((s) => !Number.isNaN(Date.parse(s)), { message: 'must be a parseable ISO date' });
 
 /**
  * The MCP surface: four tools, three resources. Tool descriptions are
@@ -90,8 +93,8 @@ export function buildMcpServer(deps: ServerDeps): McpServer {
         query: z.string().min(1),
         source_tool: z.enum(['chatgpt', 'claude', 'claude-code', 'opencode', 'markdown']).optional(),
         project: z.string().optional(),
-        after: z.string().optional().describe('ISO date lower bound'),
-        before: z.string().optional().describe('ISO date upper bound'),
+        after: ISO_DATE.optional().describe('ISO date lower bound (e.g. 2025-01-01)'),
+        before: ISO_DATE.optional().describe('ISO date upper bound (e.g. 2025-12-31)'),
         limit: z.number().int().min(1).max(10).optional().describe('Max chunks, default 5'),
       },
     },
@@ -117,7 +120,9 @@ export function buildMcpServer(deps: ServerDeps): McpServer {
         'Permanently delete personal memory. Destructive and irreversible. ' +
         'By fact_id: deletes that fact immediately. ' +
         'By query: the first call only previews what would be deleted; call again with confirm=true to ' +
-        'hard-delete the matching facts AND the matching archive chunks.',
+        'hard-delete the matching facts AND the matching archive chunks. The confirmed call re-runs the ' +
+        'search and deletes everything currently matching (in rounds, beyond the preview limit), so the ' +
+        'preview is advisory — the query is the contract.',
       annotations: { destructiveHint: true },
       inputSchema: {
         fact_id: z.string().uuid().optional(),

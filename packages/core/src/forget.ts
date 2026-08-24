@@ -45,18 +45,30 @@ export async function previewForgetByQuery(
   };
 }
 
+/**
+ * Deletes in rounds until the query stops matching, so matches beyond the
+ * per-search top-K do not survive. The search is re-run at execution time:
+ * anything newly matching since the preview is deleted too (the preview is
+ * advisory, the query is the contract).
+ */
 export async function executeForgetByQuery(
   pool: Pool,
   qdrant: QdrantClient,
   embedder: Embedder,
   query: string,
 ): Promise<ForgetOutcome> {
-  const preview = await previewForgetByQuery(pool, qdrant, embedder, query);
+  const MAX_ROUNDS = 20;
   let deletedFacts = 0;
-  for (const f of preview.facts) {
-    if (await hardDeleteFact(pool, f.id)) deletedFacts += 1;
+  let deletedChunks = 0;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const preview = await previewForgetByQuery(pool, qdrant, embedder, query);
+    if (preview.facts.length === 0 && preview.archive_chunks.length === 0) break;
+    for (const f of preview.facts) {
+      if (await hardDeleteFact(pool, f.id)) deletedFacts += 1;
+    }
+    const chunkIds = preview.archive_chunks.map((c) => c.chunk_id);
+    await qdrant.deletePoints(chunkIds);
+    deletedChunks += chunkIds.length;
   }
-  const chunkIds = preview.archive_chunks.map((c) => c.chunk_id);
-  await qdrant.deletePoints(chunkIds);
-  return { deleted_facts: deletedFacts, deleted_chunks: chunkIds.length };
+  return { deleted_facts: deletedFacts, deleted_chunks: deletedChunks };
 }

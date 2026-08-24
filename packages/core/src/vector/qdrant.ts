@@ -47,6 +47,25 @@ export interface QdrantClient {
 }
 
 /** Deterministic point id so re-ingesting the same content is an upsert no-op. */
+interface QdrantCollectionInfo {
+  result?: {
+    points_count?: number;
+    config?: { params?: { vectors?: { dense?: { size?: number } } } };
+  };
+}
+interface QdrantQueryResponse {
+  result: { points: { id: string | number; score: number; payload: ChunkPayload }[] };
+}
+interface QdrantScrollResponse {
+  result: {
+    points: { id: string | number; payload: ChunkPayload }[];
+    next_page_offset?: string | number | null;
+  };
+}
+interface QdrantCountResponse {
+  result: { count: number };
+}
+
 export function chunkPointId(contentHash: string, chunkIndex: number): string {
   const h = createHash('sha256').update(`${contentHash}:${chunkIndex}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
@@ -72,7 +91,7 @@ export function createQdrantClient(
 ): QdrantClient {
   const base = baseUrl.replace(/\/+$/, '');
 
-  async function req(method: string, path: string, body?: unknown): Promise<any> {
+  async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetchImpl(`${base}${path}`, {
       method,
       headers: { 'content-type': 'application/json' },
@@ -81,14 +100,14 @@ export function createQdrantClient(
     if (!res.ok) {
       throw new Error(`qdrant ${method} ${path} failed: ${res.status} ${await res.text()}`);
     }
-    return res.json();
+    return (await res.json()) as T;
   }
 
   return {
     async ensureCollection() {
       const probe = await fetchImpl(`${base}/collections/${collection}`);
       if (probe.ok) {
-        const info = (await probe.json()) as any;
+        const info = (await probe.json()) as QdrantCollectionInfo;
         const existing = info.result?.config?.params?.vectors?.dense?.size;
         if (existing !== dims) {
           throw new Error(
@@ -116,11 +135,10 @@ export function createQdrantClient(
     },
 
     async collectionInfo() {
-      const info = await req('GET', `/collections/${collection}`);
-      return {
-        dims: info.result.config.params.vectors.dense.size as number,
-        points: (info.result.points_count ?? 0) as number,
-      };
+      const info = await req<QdrantCollectionInfo>('GET', `/collections/${collection}`);
+      const dims = info.result?.config?.params?.vectors?.dense?.size;
+      if (dims === undefined) throw new Error(`collection '${collection}' has no dense vector config`);
+      return { dims, points: info.result?.points_count ?? 0 };
     },
 
     async upsert(points) {
@@ -134,7 +152,7 @@ export function createQdrantClient(
     },
 
     async queryHybrid(dense, sparse, limit, filter) {
-      const body = await req('POST', `/collections/${collection}/points/query`, {
+      const body = await req<QdrantQueryResponse>('POST', `/collections/${collection}/points/query`, {
         prefetch: [
           { query: dense, using: 'dense', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
           { query: sparse, using: 'sparse', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
@@ -143,10 +161,10 @@ export function createQdrantClient(
         limit,
         with_payload: true,
       });
-      return (body.result.points as any[]).map((p) => ({
+      return body.result.points.map((p) => ({
         id: String(p.id),
-        score: p.score as number,
-        payload: p.payload as ChunkPayload,
+        score: p.score,
+        payload: p.payload,
       }));
     },
 
@@ -163,16 +181,16 @@ export function createQdrantClient(
 
     async scrollBySession(sessionId) {
       const out: { id: string; payload: ChunkPayload }[] = [];
-      let offset: unknown = undefined;
+      let offset: string | number | null | undefined = undefined;
       for (;;) {
-        const body = await req('POST', `/collections/${collection}/points/scroll`, {
+        const body: QdrantScrollResponse = await req('POST', `/collections/${collection}/points/scroll`, {
           filter: { must: [{ key: 'session_id', match: { value: sessionId } }] },
           with_payload: true,
           limit: 100,
           offset,
         });
-        for (const p of body.result.points as any[]) {
-          out.push({ id: String(p.id), payload: p.payload as ChunkPayload });
+        for (const p of body.result.points) {
+          out.push({ id: String(p.id), payload: p.payload });
         }
         offset = body.result.next_page_offset;
         if (offset === null || offset === undefined) break;
@@ -183,8 +201,8 @@ export function createQdrantClient(
     },
 
     async count() {
-      const body = await req('POST', `/collections/${collection}/points/count`, { exact: true });
-      return body.result.count as number;
+      const body = await req<QdrantCountResponse>('POST', `/collections/${collection}/points/count`, { exact: true });
+      return body.result.count;
     },
   };
 }

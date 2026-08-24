@@ -101,8 +101,8 @@ describe('ingestFile', () => {
     expect(ledgerRows[0][6]).toBe('quarantined');
   });
 
-  it('rolls back already-upserted sessions when a later session fails', async () => {
-    const { deps, deletedSessions } = makeDeps();
+  it('treats infra failure as transient: rollback, no ledger record, retryable', async () => {
+    const { deps, deletedSessions, ledgerRows } = makeDeps();
     let calls = 0;
     (deps.embedder.embed as any) = vi.fn(async (texts: string[]) => {
       calls += 1;
@@ -115,7 +115,24 @@ describe('ingestFile', () => {
     ]);
     const file = writeFixture('two.json', twoSessions);
     const res = await ingestFile(deps, file);
-    expect(res.status).toBe('quarantined');
+    expect(res.status).toBe('failed');
     expect(deletedSessions).toContain('claude:s1');
+    // nothing recorded: the same file re-processes on the next run
+    expect(ledgerRows).toHaveLength(0);
+  });
+
+  it('uses stable point ids so a cumulative re-export upserts instead of duplicating', async () => {
+    const first = makeDeps();
+    const fileA = writeFixture('export.json', CLAUDE_EXPORT);
+    await ingestFile(first.deps, fileA);
+    // same session shipped again inside a bigger (different-hash) export
+    const cumulative = JSON.parse(CLAUDE_EXPORT);
+    cumulative.push({ uuid: 'p2', chat_messages: [{ sender: 'human', text: 'a newer conversation' }] });
+    const second = makeDeps();
+    const fileB = writeFixture('export2.json', JSON.stringify(cumulative));
+    await ingestFile(second.deps, fileB);
+    const idsA = first.upserts.map((u) => u.id);
+    const idsB = second.upserts.filter((u) => u.payload.session_id === 'claude:p1').map((u) => u.id);
+    expect(idsB).toEqual(idsA); // overwrites, not duplicates
   });
 });

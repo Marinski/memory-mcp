@@ -1,4 +1,7 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+
+/** Pool or a checked-out client inside a transaction. */
+export type Queryable = Pick<Pool | PoolClient, 'query'>;
 
 export type FactCategory = 'preference' | 'decision' | 'fact' | 'project' | 'person';
 export type FactSource = 'user' | 'distilled' | 'imported';
@@ -35,7 +38,7 @@ export interface NewFact {
 const FACT_COLS =
   'id, statement, category, entities, confidence, source, provenance, status, superseded_by, created_at, updated_at';
 
-export async function createFact(pool: Pool, f: NewFact): Promise<Fact> {
+export async function createFact(pool: Queryable, f: NewFact): Promise<Fact> {
   const res = await pool.query(
     `INSERT INTO facts (statement, category, entities, confidence, source, provenance)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -52,12 +55,12 @@ export async function createFact(pool: Pool, f: NewFact): Promise<Fact> {
   return res.rows[0] as Fact;
 }
 
-export async function getFact(pool: Pool, id: string): Promise<Fact | null> {
+export async function getFact(pool: Queryable, id: string): Promise<Fact | null> {
   const res = await pool.query(`SELECT ${FACT_COLS} FROM facts WHERE id = $1`, [id]);
   return (res.rows[0] as Fact | undefined) ?? null;
 }
 
-export async function listRecentFacts(pool: Pool, limit = 50): Promise<Fact[]> {
+export async function listRecentFacts(pool: Queryable, limit = 50): Promise<Fact[]> {
   const res = await pool.query(
     `SELECT ${FACT_COLS} FROM facts WHERE status = 'active'
      ORDER BY updated_at DESC LIMIT $1`,
@@ -86,7 +89,7 @@ export async function findSupersedeCandidates(
   return res.rows as Fact[];
 }
 
-export async function markSuperseded(pool: Pool, oldId: string, byId: string): Promise<void> {
+export async function markSuperseded(pool: Queryable, oldId: string, byId: string): Promise<void> {
   await pool.query(
     `UPDATE facts SET status = 'superseded', superseded_by = $2, updated_at = now()
      WHERE id = $1 AND status = 'active'`,
@@ -95,7 +98,7 @@ export async function markSuperseded(pool: Pool, oldId: string, byId: string): P
 }
 
 /** Hard delete — this is personal data; deletion must mean deletion. */
-export async function hardDeleteFact(pool: Pool, id: string): Promise<boolean> {
+export async function hardDeleteFact(pool: Queryable, id: string): Promise<boolean> {
   await pool.query('UPDATE facts SET superseded_by = NULL WHERE superseded_by = $1', [id]);
   const res = await pool.query('DELETE FROM facts WHERE id = $1', [id]);
   return (res.rowCount ?? 0) > 0;

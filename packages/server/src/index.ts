@@ -1,4 +1,5 @@
 import express from 'express';
+import { pathToFileURL } from 'node:url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   loadConfig,
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
   });
 }
 
-const isMain = process.argv[1]?.endsWith('index.js');
+const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : String(err));
