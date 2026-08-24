@@ -77,7 +77,8 @@ memory-mcp/
     core/                     # memory-core library (no MCP, no HTTP)
       src/
         db/
-          schema.sql          # Postgres DDL + migrations (node-pg-migrate)
+          schema.sql          # Postgres DDL, applied via a minimal in-repo
+                              # migration runner (migrate.ts) — not node-pg-migrate
           facts.ts            # facts CRUD, entity/relation graph, provenance
           ledger.ts           # ingest ledger (file hash -> status), dedupe
         vector/
@@ -113,7 +114,7 @@ memory-mcp/
   deploy/
     compose.prod.yaml         # memory-mcp, postgres; external: qdrant, aigate
     .env.example
-  docs/mcp/                   # builder artifacts if/when a builder pass is run
+  docs/mcp/                   # this spec, plus builder artifacts if/when a builder pass is run
 ```
 
 ---
@@ -144,7 +145,7 @@ review_queue(id, proposed_fact jsonb, session_ref, created_at, resolved text nul
 ### 4.2 Qdrant
 
 Collection `memory_archive`:
-- dense vector: size = embedding model dims (Q1), cosine
+- dense vector: size = embedding model dims (1024, bge-m3 — see Decisions §1), cosine
 - sparse vector: BM25-style (Qdrant sparse), for the hybrid leg
 - payload: `{session_id, source_tool, device, project, ts, turn_range, text,
   content_hash}`; payload indexes on `source_tool`, `project`, `ts`
@@ -175,10 +176,8 @@ Clients attach `memory://facts/recent` deliberately. Prevents context pollution.
 
 ## 6. Retrieval design
 
-- Embeddings via aigate (`OPENAI_BASE_URL=http://aigate:.../v1`), model per Q1
-  (default proposal: **bge-m3** served on vLLM — 1024 dims, multilingual (BG+EN
-  sessions), proven in this exact role; alternative: Qwen3-Embedding if it benches
-  better on the golden set).
+- Embeddings via aigate (`OPENAI_BASE_URL=http://aigate:.../v1`). **bge-m3, 1024
+  dims** (decided — see Decisions §1); Qwen3-Embedding was not benched.
 - Hybrid = dense + sparse, fused with RRF; optional rerank of top-30 via a local
   reranker later (out of v1 unless golden-set results demand it).
 - The golden set (evals/golden.yaml) is written **by hand, first** — 30–50 real
@@ -210,8 +209,8 @@ that fails scrubbing entirely (parse-breaking) quarantines, never partially inge
 Candidates land in `review_queue` — **nothing distilled becomes an active fact
 without approval** (`memoryctl review` TUI: approve/edit/reject). Rationale: auto-
 approved LLM facts silently rot the high-trust layer; the queue keeps distillation
-cheap to run and safe to trust. Revisit auto-approval above a confidence threshold
-only after a month of precision data (Q7).
+cheap to run and safe to trust. Review-queue-only is the confirmed decision (see
+Decisions §7); auto-approval above a confidence threshold is not planned.
 
 ---
 
@@ -223,7 +222,7 @@ only after a month of precision data (Q7).
 | `QDRANT_URL` | ✔ | existing Qdrant instance on the host |
 | `AIGATE_BASE_URL` / `AIGATE_API_KEY` | ✔ | embeddings + distillation LLM |
 | `EMBED_MODEL` / `EMBED_DIMS` | ✔ | pinned; changing dims = new collection + re-embed (memoryctl reembed) |
-| `DISTILL_MODEL` | ✔ | e.g. `gemma-4-26b` route name in aigate |
+| `DISTILL_MODEL` | ✔ | litellm route name in aigate, e.g. `vllm-gemma4` |
 | `LISTEN` | ✔ | `<WG-IP>:7105` — WG interface only |
 | `AUTH_MODE` | ✔ | `static` (v1) / `gateway-jwt` (post-integration) |
 | `STATIC_BEARER` | v1 | random 32B; replaced by gateway-provided JWT verification later |
@@ -241,57 +240,73 @@ stack.
 
 Order and verification only; each step green before the next.
 
-**Step 1 — Scaffold + stores.**
+**Step 1 — Scaffold + stores.** ✅ Done.
 Monorepo, Postgres container + migrations, Qdrant collection creation
 (idempotent init), ledger.
 *Verify:* `memoryctl verify` reports schema version, collection dims, and
 connectivity to Qdrant + aigate from inside the container network; re-running init
 changes nothing.
 
-**Step 2 — Embedding + chunking.**
+**Step 2 — Embedding + chunking.** ✅ Done.
 aigate embeddings client, chunker with fixture sessions.
 *Verify:* golden fixture (one long Claude Code session, one ChatGPT thread) chunks
 to expected boundaries (snapshot test); embed round-trip returns `EMBED_DIMS`
 vectors; a deliberately oversized code block stays intact.
 
-**Step 3 — Ingestion pipeline.**
+**Step 3 — Ingestion pipeline.** ✅ Done.
 All five parsers → normalize → scrub → chunk → embed → upsert + ledger.
 *Verify:* ingest real exports from at least 3 tools; ledger counts match; re-run is
 a no-op (hash dedupe); a planted fake API key in a fixture arrives in Qdrant as
 `[REDACTED:...]` and increments `secrets_found`; malformed file → quarantine, exit
 non-zero, nothing partial in stores.
+*Actual:* real-data verification done with Claude Code JSONL only (41 sessions,
+2568 chunks, 4 real secrets redacted); ChatGPT/Claude/OpenCode exports not yet
+ingested. Surfaced and fixed a real bug: the embedder batched purely by text
+count, and litellm's embedding route caps total request size at 20000 characters
+— large batches failed deterministically until batching also respected a char
+budget.
 
-**Step 4 — Retrieval + golden harness.**
+**Step 4 — Retrieval + golden harness.** ✅ Done.
 Hybrid search, RRF fusion, `evals/` runner. Write golden.yaml from your own
 memorable queries **before** tuning.
 *Verify:* `pnpm eval` prints recall@5 / MRR / p95 latency; recall@5 ≥ 0.8 on the
 golden set (tune chunking/fusion until true, or document why a query is
 unreachable); results include correct session refs and dates.
+*Actual:* golden.yaml holds 15 queries written from real ingested sessions (each
+individually verified against live search_archive before landing); recall@5 =
+1.000, MRR = 0.869, p95 = 65ms. Below the spec's 30-50 target — grows as more
+sessions get ingested.
 
-**Step 5 — Facts layer + distillation.**
+**Step 5 — Facts layer + distillation.** ✅ Built; ⏳ not yet exercised on real data.
 Facts CRUD, supersede logic, distill → review queue → approve flow.
 *Verify:* distilling the fixture sessions proposes plausible facts (manual review);
 approving activates them and `search_memory` finds them; a `remember` that
 contradicts an active fact supersedes it with the old id retained; nothing enters
 `facts` as active without `source:'user'` or an approval.
 
-**Step 6 — MCP server.**
+**Step 6 — MCP server.** ✅ Done.
 Four tools + three resources over memory-core; static bearer; healthz; tool-list
 snapshot test.
 *Verify:* MCP Inspector over WG: all four tools round-trip against real data;
 `forget` by query demands confirmation on first call and deletes on second, with
 the chunk verifiably gone from Qdrant; unauthenticated request → 401; tools/list
 snapshot committed.
+*Actual:* verified live — unauthenticated `/mcp` 401s, authenticated `initialize`
+succeeds over WG, LAN-side connection refused.
 
-**Step 7 — Deployment.**
+**Step 7 — Deployment.** ⏳ Partially done.
 compose.prod.yaml, WG-only bind, systemd timer for ingest+distill, backup
 (pg_dump + Qdrant snapshot to an off-host target, nightly).
 *Verify:* cold start from compose alone on the host (arm64 images confirmed by
 `docker image inspect`); `curl` initialize from the svc host over WG succeeds; from
 the LAN's public side, connection refused; restore drill: rebuild stores from last
 night's backup on a second host and re-run `pnpm eval` — scores match.
+*Actual:* stack is up and verified (postgres/qdrant/aigate all green over WG,
+LAN refused). Not yet done: `deploy/systemd/` timers aren't installed on the host,
+no backup has actually run, and the restore drill on a second host hasn't happened
+— see Decisions §10.
 
-**Step 8 — Gateway integration** *(blocks on an internal MCP gateway existing)*.
+**Step 8 — Gateway integration** *(blocks on an internal MCP gateway existing)*. ⏳ Blocked, as designed.
 Swap `AUTH_MODE=gateway-jwt` for the gateway's JWT verification, add `memory:` to
 the gateway's tool catalog with prefix `memory_`, new `/memory` endpoint, an
 appropriate auth scope.
@@ -307,7 +322,8 @@ audit row in the gateway's own store; direct WG call without a gateway JWT now
 - Scrubbing is fail-closed and runs **before** anything is embedded or stored.
 - `forget` is a hard delete in both stores, not a soft flag (this is personal data;
   deletion must mean deletion). Backups age out on a 14-day window so a forget
-  eventually propagates (Q8).
+  eventually propagates — accepted as-is (see Decisions §8); no selective backup
+  rewrite is planned.
 - Distilled facts quarantined behind human review; archive chunks are data, and the
   MCP result shaping wraps them in delimited blocks — old sessions can contain
   instruction-like text and must be treated as untrusted data, same as any other
@@ -318,35 +334,41 @@ audit row in the gateway's own store; direct WG call without a gateway JWT now
 
 ---
 
-## Questions
+## Decisions
 
-1. **Embedding model** — bge-m3 on vLLM is the default proposal (1024 dims,
-   multilingual for BG/EN). Do you want to bench Qwen3-Embedding against it on the
-   golden set in Step 4, or standardize on bge-m3 and move on?
-2. **Postgres placement** — spec assumes a new Postgres 17 container in this compose
-   on the host (self-contained, backup to an off-host target). Alternative: reuse an
-   existing Postgres elsewhere on the network over WG (one less container, but
-   memory becomes cross-host-dependent). Confirm local.
-3. **Device sync** — Syncthing folder-per-device into the inbox, or do you prefer
-   rsync/cron from each device? (Syncthing assumed; it also covers the Windows
-   workstation cleanly.)
-4. **Source priority** — which export do you want working first for Step 3's real-
-   data verification: Claude Code JSONL (richest, local), ChatGPT zip, or OpenCode?
-5. **Obsidian vault export** — `memoryctl export-vault` writing active facts as
-   markdown into a git-synced vault: include in v1 (Step 5) or defer? (Cheap if the
-   facts schema is final; deferring costs nothing architecturally.)
-6. **ChatGPT history cadence** — there's no API for chat history, so ingest depends
-   on you periodically requesting the data export. Acceptable as a monthly manual
-   ritual, or should ChatGPT be treated as archive-only backfill (one-time import)?
-7. **Review queue tolerance** — is a weekly `memoryctl review` session realistic for
-   you? If not, say so now and Step 5 adds auto-approve above confidence 0.9 from
-   the start (with a `source:'distilled-auto'` marker so it's filterable later).
-8. **Forget vs backups** — 14-day backup retention means a forgotten item survives
-   in backups up to 14 days. Acceptable, or do you want `forget` to also trigger
-   selective backup rewrite (significant extra complexity)?
-9. **Server naming** — `memory-mcp` as repo/container name, catalog key `memory`,
-   prefix `memory_`, endpoint `/memory` — confirm these don't collide with other
-   services' naming conventions, so Step 6's snapshot locks the right names.
-10. **Second host** — used here only as the restore-drill target (Step 7). Any
-    desire for warm standby of the memory stack on it, or is nightly backup +
-    manual restore sufficient for personal data?
+What were originally open questions, resolved against what was actually built and
+verified. Items marked **open** are genuinely undecided/undone, not guessed at.
+
+1. **Embedding model** — **Decided: bge-m3, 1024 dims.** Served via an aigate
+   litellm route (`local-embed-bge-m3`) backed by an existing GPU embedding
+   service extended with an OpenAI-compatible shim. Qwen3-Embedding was not
+   benched — no need arose once bge-m3 hit recall@5 = 1.000 on the golden set.
+2. **Postgres placement** — **Decided: local.** A dedicated Postgres 17 container
+   in this compose, self-contained on the host, as built (`memory-postgres`).
+3. **Device sync** — **Open.** No automated transport is built yet. The one
+   real ingest so far (Step 3) was a one-time manual copy from this host's own
+   `~/.claude/projects` into the inbox — not the Syncthing/rsync-per-device
+   pipeline the spec describes. Needed before other devices can contribute.
+4. **Source priority** — **Decided: Claude Code JSONL**, confirmed by real use —
+   41 sessions ingested successfully (see Step 3). ChatGPT/Claude/OpenCode
+   exports haven't been tried yet.
+5. **Obsidian vault export** — **Decided: included in v1.** `memoryctl
+   export-vault` is built, though not yet exercised against real approved facts
+   since distillation hasn't run against real sessions yet (see Step 5).
+6. **ChatGPT history cadence** — **Open.** No ChatGPT export has been ingested,
+   so the manual-export cadence question hasn't come up in practice yet.
+7. **Review queue tolerance** — **Decided: review-queue-only, no auto-approve.**
+   Confirmed at the start of the build and unchanged since; no
+   `source:'distilled-auto'` path exists.
+8. **Forget vs backups** — **Decided: 14-day retention, accepted as-is.** No
+   selective backup rewrite was built. Not yet exercised against a real backup,
+   since no backup has run yet (see Step 7 / item 10 below).
+9. **Server naming** — **Decided, confirmed.** `memory-mcp` is the repo, image,
+   and container name (public GitHub repo, Docker Compose service names); the
+   `memory`/`memory_` catalog key and prefix are reserved for Step 8, which
+   remains blocked on the internal gateway existing, so no collision has been
+   possible to check yet.
+10. **Second host** — **Open.** No second host is currently wired up as a
+    restore-drill target; `deploy/systemd/` timers aren't installed anywhere yet,
+    and no backup has actually run. Closing Step 7 needs: install the timers,
+    let a backup run, then prove the restore drill on a second host.
