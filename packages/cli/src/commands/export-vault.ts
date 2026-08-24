@@ -33,7 +33,17 @@ function slugify(name: string, usedSlugs: Map<string, string>): string {
  * and as a `tags:` frontmatter property instead — still visible in Graph
  * view if wanted, but toggleable independently (Filters > Tags) rather than
  * baked into the link graph.
+ *
+ * Two entities that co-occur in only one fact are also not linked — one
+ * incidental shared mention (both happen to sit in the same sentence about
+ * some umbrella host/tool) is weak evidence of an actual relationship, and
+ * a few high-frequency "umbrella" entities co-occurring once each with
+ * dozens of unrelated others is exactly what turns the graph into a dense,
+ * low-information hairball. Repeated co-occurrence (MIN_COOCCURRENCE+) is
+ * a real signal; a single one is just shared context, so it renders as
+ * plain text instead.
  */
+const MIN_COOCCURRENCE = 2;
 export function registerExportVault(program: Command): void {
   program
     .command('export-vault')
@@ -58,18 +68,36 @@ export function registerExportVault(program: Command): void {
           }
         }
         const link = (entity: string) => `[[entities/${entitySlug.get(entity)}|${entity}]]`;
-        const entityLinks = (list: string[]) =>
-          list.length ? ` _(${list.map(link).join(', ')})_` : '';
         const entityPlain = (list: string[]) => (list.length ? ` _(${list.join(', ')})_` : '');
 
         const byCategory = new Map<string, Fact[]>();
         const byEntity = new Map<string, Fact[]>();
+        // JSON-encoded, not joined with a plain separator: entity names can
+        // themselves contain spaces, so two different pairs must not collide
+        // to the same joined string.
+        const pairKey = (a: string, b: string) => (a < b ? JSON.stringify([a, b]) : JSON.stringify([b, a]));
+        const pairCounts = new Map<string, number>();
         for (const f of facts) {
           (byCategory.get(f.category) ?? byCategory.set(f.category, []).get(f.category)!).push(f);
           for (const e of f.entities) {
             (byEntity.get(e) ?? byEntity.set(e, []).get(e)!).push(f);
           }
+          const ents = [...new Set(f.entities)];
+          for (let i = 0; i < ents.length; i++) {
+            for (let j = i + 1; j < ents.length; j++) {
+              const key = pairKey(ents[i], ents[j]);
+              pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+            }
+          }
         }
+        // Only a repeatedly co-occurring pair gets a [[wikilink]]; a single
+        // shared mention renders as plain text (see the note above).
+        const renderRelated = (entity: string, related: string[]) =>
+          related.length
+            ? ` _(${related
+                .map((e) => ((pairCounts.get(pairKey(entity, e)) ?? 0) >= MIN_COOCCURRENCE ? link(e) : e))
+                .join(', ')})_`
+            : '';
 
         for (const [category, list] of byCategory) {
           // Entity mentions are plain text here, not [[wikilinks]] — see the
@@ -101,7 +129,7 @@ export function registerExportVault(program: Command): void {
             lines.push(`## ${category}`, '');
             for (const f of catFacts) {
               const related = f.entities.filter((e) => e !== entity);
-              lines.push(`- ${f.statement}${entityLinks(related)} <!-- fact:${f.id} source:${f.source} -->`);
+              lines.push(`- ${f.statement}${renderRelated(entity, related)} <!-- fact:${f.id} source:${f.source} -->`);
             }
             lines.push('');
           }
