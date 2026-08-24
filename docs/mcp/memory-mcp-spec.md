@@ -368,12 +368,14 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
    229+ sessions ingested successfully across 6 devices (see Step 3).
    ChatGPT/Claude/OpenCode exports haven't been tried yet.
 5. **Obsidian vault export** — **Decided: included in v1, exercised against
-   real data.** `memoryctl export-vault` runs against `/srv/memory` (mounted
-   straight through to the container), writing one markdown file per fact
-   category plus an `index.md` with wikilinks. Exported 1,214 active facts
-   and pushed them via `scp` into a `Memory/` folder inside the actual
-   Obsidian vault on Ryzen — a manual, on-demand push today, not yet
-   scheduled.
+   real data, and scheduled.** `memoryctl export-vault` runs against
+   `/srv/memory` (mounted straight through to the container), writing one
+   markdown file per fact category plus an `index.md` with wikilinks.
+   `deploy/push-obsidian-vault.sh` pushes that output over `scp` into a
+   `Memory/` folder inside the live Obsidian vault on Ryzen. Both now run
+   as the last two steps of the nightly `memory-ingest.timer`, after
+   distill — opt-in via `OBSIDIAN_PUSH_HOST`/`OBSIDIAN_VAULT_PATH` in
+   `pull-remote-sessions.env`, no-op otherwise.
 6. **ChatGPT history cadence** — **Open.** No ChatGPT export has been ingested,
    so the manual-export cadence question hasn't come up in practice yet.
 7. **Review queue tolerance** — **Decided: review-queue-only, no auto-approve.**
