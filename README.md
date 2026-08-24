@@ -2,8 +2,8 @@
 
 Personal cross-tool memory: a searchable episodic archive of AI sessions from
 all devices plus a curated, high-trust semantic facts layer, exposed through an
-MCP server. Runs on the GX10 (arm64), WG-only. See
-[memory-mcp-spec.md](memory-mcp-spec.md) for the full design.
+MCP server. Designed for a self-hosted arm64 box, WG-only. See
+[docs/mcp/memory-mcp-spec.md](docs/mcp/memory-mcp-spec.md) for the full design.
 
 ## Layout
 
@@ -13,7 +13,7 @@ MCP server. Runs on the GX10 (arm64), WG-only. See
 | `packages/cli` | `memoryctl` — init, verify, ingest, distill, review, stats, export-vault, reembed |
 | `packages/server` | memory-mcp MCP server (Streamable HTTP, static bearer) |
 | `packages/evals` | retrieval golden-set harness (recall@5, MRR, p95) |
-| `deploy/` | compose.gx10.yaml, Dockerfile, systemd timers, backup script |
+| `deploy/` | compose.prod.yaml, Dockerfile, systemd timers, backup script |
 
 ## Two layers, two trust levels
 
@@ -43,14 +43,18 @@ pnpm eval         # golden-set retrieval harness (needs live stores + ingested d
 Config is environment-driven through `packages/core/src/config.ts`
 (`loadConfig`) — see `deploy/.env.example` for every variable.
 
-## Operations (GX10)
+## Operations
 
 ```
 cd deploy && cp .env.example .env   # fill in POSTGRES_PASSWORD, STATIC_BEARER, keys
-docker compose -f compose.gx10.yaml up -d --build
-docker compose -f compose.gx10.yaml exec memory-mcp memoryctl init
-docker compose -f compose.gx10.yaml exec memory-mcp memoryctl verify
+docker compose -f compose.prod.yaml up -d --build
+docker compose -f compose.prod.yaml exec memory-mcp memoryctl init
+docker compose -f compose.prod.yaml exec memory-mcp memoryctl verify
 ```
+
+`compose.prod.yaml` assumes Qdrant and an OpenAI-compatible LLM gateway
+already run as external containers on your host — edit the `networks:`
+section's `name:` fields to match your own Docker network names.
 
 Daily ingest+distill and nightly backups are systemd timers
 (`deploy/systemd/`). Backups age out after 14 days so a `forget` propagates
@@ -58,7 +62,8 @@ out of backups within that window.
 
 ## Security posture
 
-- WG-only bind, static bearer (v1); gateway JWT lands with ats-mcp-platform Step 8.
+- WG-only bind, static bearer (v1); gateway JWT is a planned future auth mode
+  (Step 8), pending a compatible OIDC/JWT gateway in front of the server.
 - Scrubbing (gitleaks + custom regexes) is **fail-closed** and runs before
   anything is embedded or stored. Unparseable input quarantines the whole
   file (recorded in the ledger); transient infrastructure failures (embedder,
@@ -67,3 +72,15 @@ out of backups within that window.
 - `forget` is a hard delete in both stores.
 - Archive chunks are returned inside untrusted-data delimiters — historical
   transcripts can contain instruction-like text and must be treated as data.
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability.
+
+## Contributing
+
+Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev
+setup and project conventions, and [CHANGELOG.md](CHANGELOG.md) for history.
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE)

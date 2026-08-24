@@ -21,7 +21,7 @@ describe('extractJson', () => {
 describe('validateProposals', () => {
   it('keeps valid proposals, drops junk, clamps confidence', () => {
     const out = validateProposals([
-      { statement: 'Marin prefers Klaro for cookie consent', category: 'preference', entities: ['Klaro'], confidence: 1.7 },
+      { statement: 'Alex prefers Klaro for cookie consent', category: 'preference', entities: ['Klaro'], confidence: 1.7 },
       { statement: '', category: 'fact', entities: [], confidence: 0.5 },
       { statement: 'x', category: 'nonsense', entities: [], confidence: 0.5 },
       'not an object',

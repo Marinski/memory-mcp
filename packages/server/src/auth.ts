@@ -4,14 +4,14 @@ import { timingSafeEqual } from 'node:crypto';
 
 /**
  * v1 auth: static bearer over the WG-only bind. AUTH_MODE=gateway-jwt is
- * reserved for the ats-mcp-platform integration (Step 8) and refuses to
- * start until @ats/mcp-shared verification is wired in.
+ * reserved for a future internal MCP gateway integration (Step 8) and
+ * refuses to start until that gateway's JWT verification is wired in.
  */
 
 export function assertAuthModeSupported(cfg: MemoryConfig): void {
   if (cfg.authMode === 'gateway-jwt') {
     throw new Error(
-      'AUTH_MODE=gateway-jwt requires the ats-mcp-platform gateway (@ats/mcp-shared); use AUTH_MODE=static until Step 8',
+      'AUTH_MODE=gateway-jwt requires an internal MCP gateway integration that does not exist yet; use AUTH_MODE=static until Step 8',
     );
   }
 }

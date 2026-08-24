@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Nightly backup: pg_dump + Qdrant collection snapshot, shipped to Monster.
+# Nightly backup: pg_dump + Qdrant collection snapshot, shipped off-host via rsync/ssh.
 # Retention: 14 days — a forget propagates out of backups within that window
 # (spec section 10 / Q8).
 set -euo pipefail
 
-BACKUP_TARGET="${BACKUP_TARGET:-monster:/backup/memory-mcp}"
+BACKUP_TARGET="${BACKUP_TARGET:?set BACKUP_TARGET, e.g. user@backup-host:/backup/memory-mcp}"
 STAMP=$(date +%Y%m%d)
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 # Postgres
-docker compose -f /srv/memory/deploy/compose.gx10.yaml exec -T memory-postgres \
+docker compose -f /srv/memory/deploy/compose.prod.yaml exec -T memory-postgres \
   pg_dump -U memory memory | gzip > "$WORKDIR/memory-pg-$STAMP.sql.gz"
 
 # Qdrant snapshot (collection-level, via the existing qdrant container)

@@ -1,10 +1,10 @@
-# memory-mcp — Implementation Spec (self-hosted second brain on GX10)
+# memory-mcp — Implementation Spec (self-hosted second brain)
 
 Personal cross-tool memory system: ingest historical and ongoing AI sessions from all
 devices/tools, store them as a searchable episodic archive plus a curated semantic
-facts layer, and expose both through an MCP server. Runs on the primary GX10
-(ARM64/aarch64, GB10), Dockerized, joining `ats-mcp-platform` as the fifth downstream
-(`/memory` endpoint) once the gateway exists.
+facts layer, and expose both through an MCP server. Runs on a self-hosted arm64 host,
+Dockerized, with an optional future integration as a downstream behind an internal
+MCP gateway (`/memory` endpoint) if one exists.
 
 Builder mode: **embed** — the MCP server imports `memory-core` directly; there is no
 pre-existing service to wrap. This spec covers the whole project: core library,
@@ -21,12 +21,14 @@ Target: MCP 2026-07-28, `@modelcontextprotocol/sdk` (TypeScript), Streamable HTT
 - `memoryctl`: ingestion + admin CLI (import, scrub, distill, export, verify)
 - `memory-mcp`: MCP server over memory-core (tools + resources)
 - Retrieval quality harness (golden queries, measured before the MCP layer exists)
-- Docker Compose deployment on GX10 (ARM64), WG-only binding
-- Gateway integration contract (ats-mcp-platform §4.4 compliance)
+- Docker Compose deployment on an arm64 host, WG-only binding
+- Gateway integration contract (compliance with an internal MCP gateway's
+  auth/catalog conventions, if one exists)
 
 **Out of scope / non-goals**
 - Realtime capture hooks inside ChatGPT/Claude/OpenCode (v1 ingests exports/files)
-- Multi-user tenancy (single `sub` = Marin; the identity field exists but is constant)
+- Multi-user tenancy (single `sub` = the operator; the identity field exists but is
+  constant)
 - A web UI (the facts vault export + MCP tools are the interfaces; UI can come later)
 - GPU workloads in this stack — embeddings and distillation are **network calls to
   the existing aigate/vLLM stack**, so no CDI passthrough for these containers
@@ -36,7 +38,7 @@ Target: MCP 2026-07-28, `@modelcontextprotocol/sdk` (TypeScript), Streamable HTT
 ## 2. Architecture
 
 ```
-devices (10x) ──sync──► GX10:/srv/memory/inbox/        (raw exports, session files)
+devices (10x) ──sync──► host:/srv/memory/inbox/        (raw exports, session files)
                               │  memoryctl ingest
                               ▼
                      parse → normalize → scrub (gitleaks) → chunk
@@ -53,7 +55,7 @@ devices (10x) ──sync──► GX10:/srv/memory/inbox/        (raw exports, s
                                        ▼
                               memory-mcp (Streamable HTTP, WG bind)
                                        ▼ later
-                    ats-mcp-gateway /memory endpoint (svc host, over WG)
+                    internal MCP gateway /memory endpoint (svc host, over WG)
 ```
 
 Two layers, different trust levels:
@@ -67,7 +69,7 @@ Two layers, different trust levels:
 
 ## 3. Repository layout
 
-Repo: `memory-mcp` (single repo, pnpm workspaces — mirrors ats-mcp-platform style).
+Repo: `memory-mcp` (single repo, pnpm workspaces).
 
 ```
 memory-mcp/
@@ -101,7 +103,7 @@ memory-mcp/
     server/                   # memory-mcp MCP server
       src/
         index.ts              # Streamable HTTP bootstrap, healthz
-        auth.ts               # v1: static bearer (WG-only); later @ats/mcp-shared JWT
+        auth.ts               # v1: static bearer (WG-only); later gateway-issued JWT
         tools/                # remember, search_memory, search_archive, forget
         resources/            # memory://facts/recent, memory://facts/{id},
                               # memory://stats
@@ -109,7 +111,7 @@ memory-mcp/
       golden.yaml             # query -> expected source sessions/facts
       run.ts                  # recall@k, MRR, latency report
   deploy/
-    compose.gx10.yaml         # memory-mcp, postgres; external: qdrant, aigate
+    compose.prod.yaml         # memory-mcp, postgres; external: qdrant, aigate
     .env.example
   docs/mcp/                   # builder artifacts if/when a builder pass is run
 ```
@@ -218,16 +220,16 @@ only after a month of precision data (Q7).
 | Var | Req | Purpose |
 |---|---|---|
 | `DATABASE_URL` | ✔ | Postgres (container in this compose) |
-| `QDRANT_URL` | ✔ | existing GX10 Qdrant |
+| `QDRANT_URL` | ✔ | existing Qdrant instance on the host |
 | `AIGATE_BASE_URL` / `AIGATE_API_KEY` | ✔ | embeddings + distillation LLM |
 | `EMBED_MODEL` / `EMBED_DIMS` | ✔ | pinned; changing dims = new collection + re-embed (memoryctl reembed) |
 | `DISTILL_MODEL` | ✔ | e.g. `gemma-4-26b` route name in aigate |
-| `LISTEN` | ✔ | `<WG-IP>:7105` — WG interface only, like every ATS downstream |
+| `LISTEN` | ✔ | `<WG-IP>:7105` — WG interface only |
 | `AUTH_MODE` | ✔ | `static` (v1) / `gateway-jwt` (post-integration) |
-| `STATIC_BEARER` | v1 | random 32B; replaced by @ats/mcp-shared verification later |
+| `STATIC_BEARER` | v1 | random 32B; replaced by gateway-provided JWT verification later |
 | `INBOX_DIR`, `MAX_RESULT_KB` | – | defaults `/srv/memory/inbox`, 50 |
 
-Compose notes (GX10 = aarch64): all images must be arm64 —
+Compose notes (arm64 host): all images must be arm64 —
 `node:22-bookworm-slim`, `postgres:17`, `gitleaks` (arm64 release binary baked into
 the CLI image) all publish arm64. Qdrant and aigate are **external** services on the
 existing network, referenced not redeclared. No GPU device requests anywhere in this
@@ -281,20 +283,21 @@ snapshot test.
 the chunk verifiably gone from Qdrant; unauthenticated request → 401; tools/list
 snapshot committed.
 
-**Step 7 — GX10 deployment.**
-compose.gx10.yaml, WG-only bind, systemd timer for ingest+distill, backup
-(pg_dump + Qdrant snapshot to Monster, nightly).
-*Verify:* cold start from compose alone on the GX10 (arm64 images confirmed by
+**Step 7 — Deployment.**
+compose.prod.yaml, WG-only bind, systemd timer for ingest+distill, backup
+(pg_dump + Qdrant snapshot to an off-host target, nightly).
+*Verify:* cold start from compose alone on the host (arm64 images confirmed by
 `docker image inspect`); `curl` initialize from the svc host over WG succeeds; from
 the LAN's public side, connection refused; restore drill: rebuild stores from last
-night's backup on the second GX10 node and re-run `pnpm eval` — scores match.
+night's backup on a second host and re-run `pnpm eval` — scores match.
 
-**Step 8 — Gateway integration** *(blocks on ats-mcp-platform Step 5)*.
-Swap `AUTH_MODE=gateway-jwt` (@ats/mcp-shared), add `memory:` to gateway
-catalog.yaml with prefix `memory_`, new `/memory` endpoint, scope `ats:ops`.
-*Verify:* full path — Claude → `mcp.algotradingspace.com/memory` → OAuth → tool
-call → audit row in gateway PG; direct WG call without gateway JWT now 401;
-`memory_*` tools appear on `/ops` and `/memory`, absent from `/marketplace`.
+**Step 8 — Gateway integration** *(blocks on an internal MCP gateway existing)*.
+Swap `AUTH_MODE=gateway-jwt` for the gateway's JWT verification, add `memory:` to
+the gateway's tool catalog with prefix `memory_`, new `/memory` endpoint, an
+appropriate auth scope.
+*Verify:* full path — client → gateway `/memory` endpoint → OAuth → tool call →
+audit row in the gateway's own store; direct WG call without a gateway JWT now
+401; `memory_*` tools appear correctly scoped in the gateway's tool catalog.
 
 ---
 
@@ -306,10 +309,12 @@ call → audit row in gateway PG; direct WG call without gateway JWT now 401;
   deletion must mean deletion). Backups age out on a 14-day window so a forget
   eventually propagates (Q8).
 - Distilled facts quarantined behind human review; archive chunks are data, and the
-  MCP result shaping wraps them in delimited blocks (same injection framing as the
-  gateway's marketplace hygiene — old sessions can contain instruction-like text).
-- The archive is the most sensitive dataset you will host. It lives only on GX10 +
-  encrypted backup target; it is never a marketplace-visible capability.
+  MCP result shaping wraps them in delimited blocks — old sessions can contain
+  instruction-like text and must be treated as untrusted data, same as any other
+  MCP tool result.
+- The archive is the most sensitive dataset you will host. It lives only on this
+  host plus an encrypted backup target; it is not exposed as a publicly discoverable
+  capability.
 
 ---
 
@@ -319,9 +324,9 @@ call → audit row in gateway PG; direct WG call without gateway JWT now 401;
    multilingual for BG/EN). Do you want to bench Qwen3-Embedding against it on the
    golden set in Step 4, or standardize on bge-m3 and move on?
 2. **Postgres placement** — spec assumes a new Postgres 17 container in this compose
-   on the GX10 (self-contained, backup to Monster). Alternative: reuse Monster's
-   Postgres over WG (one less container, but memory becomes cross-host-dependent).
-   Confirm local.
+   on the host (self-contained, backup to an off-host target). Alternative: reuse an
+   existing Postgres elsewhere on the network over WG (one less container, but
+   memory becomes cross-host-dependent). Confirm local.
 3. **Device sync** — Syncthing folder-per-device into the inbox, or do you prefer
    rsync/cron from each device? (Syncthing assumed; it also covers the Windows
    workstation cleanly.)
@@ -340,8 +345,8 @@ call → audit row in gateway PG; direct WG call without gateway JWT now 401;
    in backups up to 14 days. Acceptable, or do you want `forget` to also trigger
    selective backup rewrite (significant extra complexity)?
 9. **Server naming** — `memory-mcp` as repo/container name, catalog key `memory`,
-   prefix `memory_`, endpoint `/memory` — confirm, given the backtester/generator
-   renames, so Step 6's snapshot locks the right names.
-10. **Second GX10 node** — used here only as the restore-drill target (Step 7).
-    Any desire for warm standby of the memory stack on it, or is nightly backup +
+   prefix `memory_`, endpoint `/memory` — confirm these don't collide with other
+   services' naming conventions, so Step 6's snapshot locks the right names.
+10. **Second host** — used here only as the restore-drill target (Step 7). Any
+    desire for warm standby of the memory stack on it, or is nightly backup +
     manual restore sufficient for personal data?

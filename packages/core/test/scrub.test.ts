@@ -15,7 +15,7 @@ describe('redactWithRules', () => {
   });
 
   it('redacts url basic-auth credentials', () => {
-    const r = redactWithRules('db is postgres://marin:hunter2secret@db.local/prod');
+    const r = redactWithRules('db is postgres://alice:hunter2secret@db.local/prod');
     expect(r.text).toContain('[REDACTED:url-basic-auth]');
     expect(r.text).not.toContain('hunter2secret');
   });

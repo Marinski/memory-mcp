@@ -8,5 +8,5 @@ Type=oneshot
 WorkingDirectory=/srv/memory/deploy
 # '-' prefix: a quarantined/failed file must not skip the distill pass;
 # ingest's own output/ledger records the failure for inspection.
-ExecStart=-/usr/bin/docker compose -f compose.gx10.yaml exec -T memory-mcp memoryctl ingest
-ExecStart=/usr/bin/docker compose -f compose.gx10.yaml exec -T memory-mcp memoryctl distill
+ExecStart=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl ingest
+ExecStart=/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl distill

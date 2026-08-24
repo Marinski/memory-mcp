@@ -1,9 +1,10 @@
-# memory-mcp stack for the GX10 (aarch64). Qdrant and aigate are EXTERNAL
-# services on their existing docker networks — referenced, not redeclared:
-#   qdrant           -> network litellm-config_default (hostname 'qdrant')
-#   aigate litellm   -> network aigate_aigate-public   (hostname 'aigate-litellm-1')
+# memory-mcp stack for an arm64 host. Qdrant and an OpenAI-compatible LLM
+# gateway are EXTERNAL services on their own existing docker networks —
+# referenced here, not redeclared. Replace the two `name:` fields below
+# under `networks:` with your own network names, and `qdrant`/`aigate-litellm-1`
+# hostnames in .env with your own container hostnames.
 # No GPU device requests anywhere: embeddings and distillation are network
-# calls to the aigate/vLLM stack.
+# calls out to your existing LLM gateway.
 
 name: memory-mcp
 
@@ -23,7 +24,7 @@ services:
       timeout: 5s
       retries: 5
     # internal network only — the memory DB is not reachable from the
-    # aigate/qdrant networks
+    # gateway/qdrant networks
     networks: [memory]
 
   memory-mcp:
@@ -38,7 +39,7 @@ services:
       # the WG-only property comes from the host port binding below
       LISTEN: 0.0.0.0:7105
     ports:
-      # WG-only bind: LISTEN_HOST is the GX10's WG address (10.8.0.x)
+      # WG-only bind: LISTEN_HOST must be this host's WG interface address
       - "${LISTEN_HOST:-10.8.0.1}:7105:7105"
     volumes:
       - /srv/memory:/srv/memory
@@ -50,10 +51,12 @@ services:
 networks:
   memory: {}
   qdrant_net:
-    name: litellm-config_default
+    # replace with the docker network your existing Qdrant container runs on
+    name: qdrant_default
     external: true
   aigate_net:
-    name: aigate_aigate-public
+    # replace with the docker network your existing LLM gateway runs on
+    name: aigate_default
     external: true
 
 volumes:
