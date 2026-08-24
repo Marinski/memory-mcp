@@ -14,6 +14,7 @@ EnvironmentFile=-/srv/memory/deploy/pull-remote-sessions.env
 # or per-file failure for inspection. distill is the one line without '-':
 # its exit status is what marks this unit failed.
 ExecStart=-/srv/memory/deploy/pull-remote-sessions.sh
+ExecStart=-/srv/memory/deploy/export-opencode-sessions.sh
 ExecStart=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl ingest
 ExecStart=/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl distill
 # Re-export active facts to markdown and push into the Obsidian vault, so
