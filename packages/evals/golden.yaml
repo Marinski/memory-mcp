@@ -1,11 +1,12 @@
 # Retrieval golden set — the project's real acceptance criterion.
 #
-# Written from real ingested Claude Code sessions (2026-08-24). Query
-# phrasing is genericized where the underlying session touched business
-# specifics (domain names, product/tool names) — this file is public.
-# Session ids use the parser prefixes, e.g. "claude-code:<uuid>",
-# "markdown:<slug>:<hash>". Target: 30-50 entries, recall@5 >= 0.8 — add
-# more as new sessions get ingested.
+# Written from real ingested Claude Code sessions (2026-08-24, expanded
+# after ingesting three more hosts the same day). Query phrasing is
+# genericized where the underlying session touched business specifics
+# (domain names, product/tool names) — this file is public. Session ids
+# use the parser prefixes, e.g. "claude-code:<uuid>", "markdown:<slug>:<hash>".
+# Target: 30-50 entries, recall@5 >= 0.8 — add more as new sessions get
+# ingested.
 
 queries:
   - query: "setting up cluster mode between two arm64 hosts over a high-speed NIC"
@@ -39,3 +40,39 @@ queries:
     expected_sessions: ["markdown:translation-model-benchmark:4b2162bba437"]
   - query: "host pkill accidentally killing processes inside containers"
     expected_sessions: ["markdown:pkill-hits-containers:a2877a05e57b"]
+  - query: "verifying backtester integrations with the portfolio builder and account tracker before enabling bulk sending"
+    expected_sessions: ["claude-code:c77f68e3-4834-43e6-81c4-a9334ccce4b9"]
+  - query: "a CRLF line-ending bug that silently rewrote a file with a three-step payment processor fallthrough"
+    expected_sessions: ["claude-code:e0e7be3e-6599-421f-9349-12d17bf665aa"]
+  - query: "reconnaissance on an email marketing platform's contacts, segments, and campaigns before an integration"
+    expected_sessions: ["claude-code:497ca417-2928-41ee-8cc0-2685d6942ee0"]
+  - query: "re-running an EA Studio GBPJPY test and reviewing research and PRD docs for a new build"
+    expected_sessions: ["claude-code:d608a8d8-aac2-4d62-9a63-042bdf3d2b96"]
+  - query: "verifying the internal corpus migration script"
+    expected_sessions: ["claude-code:705dcea7-bd31-45b5-961b-ba40b83b3d7d"]
+  - query: "working around not being able to upload a custom .mqh file to a server-managed include directory"
+    expected_sessions: ["claude-code:c06ef4b3-9bff-42f7-acb7-616e1964b439"]
+  - query: "rebuilding the full historical price bar cache across all trading symbols with a larger memory limit"
+    expected_sessions: ["claude-code:a2a7da54-aa52-4d66-a37b-f228e7399564"]
+  - query: "tightening the license-change limit to prevent frequent license switching"
+    expected_sessions: ["claude-code:0faddc93-f173-4ea8-9a74-1b8c792ec9be"]
+  - query: "verifying PHP-FPM pm.max_children pool settings after a tuning change"
+    expected_sessions: ["claude-code:73702bdd-0c08-4eee-960e-376517d3ed87"]
+  - query: "checking whether flagged content pairs are real duplicates across languages"
+    expected_sessions: ["claude-code:7460aa1c-3214-4c2b-bc3b-e8b9f8effe34"]
+  - query: "fixing email deliverability by adding a list-hygiene activation flag to the contact sync"
+    expected_sessions: ["markdown:email-deliverability-investigation:c307500c5067"]
+  - query: "verifying a block editor refactor produces an identical section-sequence fingerprint to the old build"
+    expected_sessions: ["markdown:gutenberg-refactor-project:8ad3e84de77f"]
+  - query: "the license server's .mqh module has never been compiled and needs a build test"
+    expected_sessions: ["markdown:ats-license-server:1daf2657981e"]
+  - query: "why chatbot retrieval caps at 10 chunks and truncates context to under 10000 characters"
+    expected_sessions: ["markdown:sb-chatbot-tuning-findings:e9ace706eae6"]
+  - query: "diagnosing an auth incident where a legacy API key looked rotated but was actually removed"
+    expected_sessions: ["markdown:tracker-ingestion-auth-incident:a7a51f2a97ef"]
+  - query: "how the OmniCode app is deployed on the live server"
+    expected_sessions: ["markdown:omnicode-deployment:1c117a4414bf"]
+  - query: "diagnosing a Google Workspace ban caused by automated email-gate auto-replies"
+    expected_sessions: ["markdown:gmail-ban-incident:3fa35ebb6825"]
+  - query: "fixing an analytics bug where orders weren't mapped to the right WooCommerce product IDs"
+    expected_sessions: ["markdown:analytics-product-id-zero-bug:4d893f82064a"]
