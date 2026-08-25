@@ -15,8 +15,15 @@ export { searchMemory, searchArchive, shapeArchiveResults, type MemoryHit, type 
 export { forgetByFactId, previewForgetByQuery, executeForgetByQuery, type ForgetPreview, type ForgetOutcome } from './forget.js';
 export { createLlmClient, extractJson, type LlmClient } from './distill/llm.js';
 export { distillPending, validateProposals, type ProposedFact, type DistillDeps, type DistillReport } from './distill/extract.js';
-export { pendingReviews, approveReview, rejectReview, reviewQueueCount, type ReviewItem } from './distill/review.js';
-export { remember, checkContradictions, type RememberResult } from './remember.js';
+export {
+  pendingReviews,
+  approveReview,
+  rejectReview,
+  reviewQueueCount,
+  type ReviewItem,
+  type ApproveResult,
+} from './distill/review.js';
+export { remember, checkSupersedes, type RememberResult } from './remember.js';
 export { memoryStats, type MemoryStats } from './stats.js';
 export {
   findDuplicateEntities,

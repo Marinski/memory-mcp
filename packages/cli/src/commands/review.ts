@@ -48,8 +48,13 @@ export function registerReview(program: Command): void {
               ...(entities ? { entities: entities.split(',').map((e) => e.trim()).filter(Boolean) } : {}),
             };
           }
-          const fact = await approveReview(ctx.pool, item.id, edited);
-          console.log(fact ? `  approved -> fact ${fact.id}` : '  already resolved');
+          const result = await approveReview(ctx.pool, ctx.llm, item.id, edited);
+          if (!result) {
+            console.log('  already resolved');
+          } else {
+            const supersedeNote = result.superseded.length ? `, superseded ${result.superseded.length}` : '';
+            console.log(`  approved -> fact ${result.fact.id}${supersedeNote}`);
+          }
         }
       } finally {
         rl.close();

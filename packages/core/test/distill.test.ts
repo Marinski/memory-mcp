@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateProposals, distillPending } from '../src/distill/extract.js';
 import { extractJson } from '../src/distill/llm.js';
-import { checkContradictions } from '../src/remember.js';
+import { checkSupersedes } from '../src/remember.js';
 import type { Fact } from '../src/db/facts.js';
 import type { LlmClient } from '../src/distill/llm.js';
 import type { Pool } from 'pg';
@@ -92,19 +92,19 @@ describe('distillPending', () => {
   });
 });
 
-describe('checkContradictions', () => {
+describe('checkSupersedes', () => {
   const fact = (id: string, statement: string): Fact =>
     ({ id, statement, category: 'preference', entities: [], confidence: 1, source: 'user', provenance: [], status: 'active', superseded_by: null, created_at: new Date(), updated_at: new Date() });
 
   it('returns only ids the LLM names that exist among candidates', async () => {
     const llm: LlmClient = { complete: async () => '["f1","bogus"]' };
-    const out = await checkContradictions(llm, 'new', [fact('f1', 'old')]);
+    const out = await checkSupersedes(llm, 'new', [fact('f1', 'old')]);
     expect(out).toEqual(['f1']);
   });
 
   it('is best-effort: LLM failure yields no supersedes', async () => {
     const llm: LlmClient = { complete: async () => { throw new Error('down'); } };
-    const out = await checkContradictions(llm, 'new', [fact('f1', 'old')]);
+    const out = await checkSupersedes(llm, 'new', [fact('f1', 'old')]);
     expect(out).toEqual([]);
   });
 });
