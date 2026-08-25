@@ -41,14 +41,19 @@ pull_local() {
   echo "== local ($LOCAL_DEVICE_NAME) =="
   # No -a: preserving remote owner/group needs root and isn't needed here —
   # these files just get consumed and moved by the ingest pipeline.
-  rsync -rlt "$LOCAL_CLAUDE_DIR/" "$dest/" || echo "  local pull failed"
+  # --exclude .git/: a project folder can contain its own git-tracked
+  # scratch dir (seen in practice: a "memory/" subfolder with a real .git/
+  # inside a Claude project tree) — repo internals aren't session content
+  # and always land in quarantine (undetectable source kind), so skip them
+  # at the source instead of pulling and discarding them every run.
+  rsync -rlt --exclude='.git/' "$LOCAL_CLAUDE_DIR/" "$dest/" || echo "  local pull failed"
 }
 
 pull_rsync_host() {
   local host="$1" dest="$INBOX/$(device_name_for "$1")"
   mkdir -p "$dest"
   echo "== $host (rsync) =="
-  rsync -rltz "$host:~/.claude/projects/" "$dest/" || echo "  $host pull failed"
+  rsync -rltz --exclude='.git/' "$host:~/.claude/projects/" "$dest/" || echo "  $host pull failed"
 }
 
 pull_scp_host() {
