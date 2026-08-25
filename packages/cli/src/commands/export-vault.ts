@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Command } from 'commander';
-import { listRecentFacts, type Fact } from '@memory/core';
+import { allFacts, type Fact } from '@memory/core';
 import { createContext } from '../context.js';
 
 const INVALID_FILENAME_CHARS = /[\\/:*?"<>|\x00-\x1f]/g;
@@ -52,6 +52,17 @@ function slugify(name: string, usedSlugs: Map<string, string>): string {
  * low-information hairball. Repeated co-occurrence (MIN_COOCCURRENCE+) is
  * a real signal; a single one is just shared context, so it renders as
  * plain text instead.
+ *
+ * daily/YYYY-MM-DD.md is a different kind of page from everything above: a
+ * historical event log rather than a current-state view. Category/entity
+ * pages only ever show active facts (current truth); a day's file instead
+ * records what HAPPENED that day and never needs to change once written —
+ * "Learned" entries are keyed by created_at, "Superseded" entries by the day
+ * the replacement happened (updated_at), not the day the old fact was
+ * originally learned, so a past day's file is never retroactively edited.
+ * Dated by created_at/updated_at (when memory-mcp recorded the event), not
+ * the source session's actual date — cheap and always available, at the
+ * cost of some lag when review runs well after ingest.
  */
 const MIN_COOCCURRENCE = 2;
 export function registerExportVault(program: Command): void {
@@ -62,17 +73,28 @@ export function registerExportVault(program: Command): void {
     .action(async (opts: { out: string }) => {
       const ctx = createContext();
       try {
-        const facts = await listRecentFacts(ctx.pool, 10_000);
+        const allFactRows = await allFacts(ctx.pool, 10_000);
+        // Category/entity/index pages show current truth only — same
+        // active-only set listRecentFacts would have returned.
+        const facts = allFactRows.filter((f) => f.status === 'active');
 
         // Full regenerate so a fact that's superseded/deleted doesn't leave
         // a stale page behind — the export always mirrors current state.
         await rm(opts.out, { recursive: true, force: true });
         const entitiesDir = path.join(opts.out, 'entities');
+        const dailyDir = path.join(opts.out, 'daily');
         await mkdir(entitiesDir, { recursive: true });
+        await mkdir(dailyDir, { recursive: true });
 
         const usedSlugs = new Map<string, string>();
         const entitySlug = new Map<string, string>();
-        for (const f of facts) {
+        // Built from every fact regardless of status, not just active ones:
+        // the daily log links entities mentioned in now-superseded facts
+        // too, and every entity ever mentioned needs a stable slug so that
+        // link() never renders "undefined" for one whose only mentions have
+        // since gone stale (its entity page simply won't exist, which
+        // Obsidian shows as a normal unresolved link).
+        for (const f of allFactRows) {
           for (const e of f.entities) {
             if (!entitySlug.has(e)) entitySlug.set(e, slugify(e, usedSlugs));
           }
@@ -147,20 +169,58 @@ export function registerExportVault(program: Command): void {
           await writeFile(path.join(entitiesDir, `${slug}.md`), lines.join('\n') + '\n');
         }
 
+        const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+        const factById = new Map(allFactRows.map((f) => [f.id, f]));
+        const learnedByDay = new Map<string, Fact[]>();
+        const supersededByDay = new Map<string, Fact[]>();
+        for (const f of allFactRows) {
+          const learnedDay = dayKey(f.created_at);
+          (learnedByDay.get(learnedDay) ?? learnedByDay.set(learnedDay, []).get(learnedDay)!).push(f);
+          if (f.status === 'superseded') {
+            const staleDay = dayKey(f.updated_at);
+            (supersededByDay.get(staleDay) ?? supersededByDay.set(staleDay, []).get(staleDay)!).push(f);
+          }
+        }
+        const allDays = [...new Set([...learnedByDay.keys(), ...supersededByDay.keys()])].sort();
+        for (const day of allDays) {
+          const lines = [`# ${day}`, ''];
+          const learned = learnedByDay.get(day) ?? [];
+          if (learned.length) {
+            lines.push(`## Learned (${learned.length})`, '');
+            for (const f of learned) {
+              lines.push(`- [${f.category}] ${f.statement}${entityLinks(f.entities)} <!-- fact:${f.id} source:${f.source} -->`);
+            }
+            lines.push('');
+          }
+          const superseded = supersededByDay.get(day) ?? [];
+          if (superseded.length) {
+            lines.push(`## Superseded (${superseded.length})`, '');
+            for (const f of superseded) {
+              const replacement = f.superseded_by ? factById.get(f.superseded_by) : undefined;
+              const arrow = replacement ? ` → replaced by: ${replacement.statement}` : '';
+              lines.push(`- ${f.statement}${arrow} <!-- fact:${f.id} -->`);
+            }
+            lines.push('');
+          }
+          await writeFile(path.join(dailyDir, `${day}.md`), lines.join('\n') + '\n');
+        }
+
         const topEntities = [...byEntity.entries()]
           .sort((a, b) => b[1].length - a[1].length)
           .slice(0, 40);
+        const recentDays = [...allDays].reverse().slice(0, 14);
         await writeFile(
           path.join(opts.out, 'index.md'),
           `# Memory vault\n\n` +
             `Exported ${new Date().toISOString()} — ${facts.length} active facts, ${byEntity.size} entities.\n\n` +
             `## Categories\n\n${[...byCategory.keys()].map((c) => `- [[${c}]]`).join('\n')}\n\n` +
+            `## Daily log\n\n${recentDays.map((d) => `- [[daily/${d}|${d}]]`).join('\n')}\n\n` +
             `## Most-mentioned projects & tools\n\n${topEntities
               .map(([e, list]) => `- ${link(e)} (${list.length})`)
               .join('\n')}\n`,
         );
 
-        console.log(`exported ${facts.length} facts (${byEntity.size} entities) to ${opts.out}`);
+        console.log(`exported ${facts.length} facts (${byEntity.size} entities, ${allDays.length} daily notes) to ${opts.out}`);
       } finally {
         await ctx.pool.end();
       }

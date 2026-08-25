@@ -70,6 +70,18 @@ export async function listRecentFacts(pool: Queryable, limit = 50): Promise<Fact
 }
 
 /**
+ * Every fact regardless of status, oldest first. Unlike listRecentFacts
+ * (active only — "current truth" for category/entity pages and the
+ * memory://facts/recent resource), the vault's daily log is a historical
+ * event log: it needs superseded facts too, to record the day something
+ * went stale.
+ */
+export async function allFacts(pool: Queryable, limit = 10_000): Promise<Fact[]> {
+  const res = await pool.query(`SELECT ${FACT_COLS} FROM facts ORDER BY created_at LIMIT $1`, [limit]);
+  return res.rows as Fact[];
+}
+
+/**
  * Candidate facts a new statement could contradict: active, same category,
  * sharing at least one entity. The actual contradiction decision is made by
  * the LLM check in supersede.ts.
