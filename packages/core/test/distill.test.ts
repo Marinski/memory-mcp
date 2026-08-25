@@ -30,6 +30,30 @@ describe('validateProposals', () => {
     expect(out).toHaveLength(1);
     expect(out[0].confidence).toBe(1);
   });
+
+  it('strips filename/path-like entities the LLM extracted despite the prompt rule', () => {
+    const out = validateProposals([
+      {
+        statement: 'auth.ts overwrites an existing role on invite',
+        category: 'fact',
+        entities: ['auth.ts', 'auth.config.ts', 'translate_platform.py', 'src/app/api/admin/route.ts', 'EA-CONTENT-BRIEF.md', 'GX10'],
+        confidence: 0.8,
+      },
+    ]);
+    expect(out[0].entities).toEqual(['GX10']);
+  });
+
+  it('keeps capitalized .js/.ts brand names, which are real entities not files', () => {
+    const out = validateProposals([
+      {
+        statement: 'Uses Next.js with PM2',
+        category: 'fact',
+        entities: ['Next.js', 'Node.js', 'Vue.js', 'D3.js', 'next.config.js'],
+        confidence: 0.8,
+      },
+    ]);
+    expect(out[0].entities).toEqual(['Next.js', 'Node.js', 'Vue.js', 'D3.js']);
+  });
 });
 
 describe('distillPending', () => {
