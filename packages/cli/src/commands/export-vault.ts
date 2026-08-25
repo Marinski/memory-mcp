@@ -34,13 +34,15 @@ function slugify(name: string, usedSlugs: Map<string, string>): string {
  * still visible in Graph view if wanted, but toggleable independently
  * (Filters > Tags) rather than baked into the link graph.
  *
- * The other direction — a category page (fact.md, project.md, ...) linking
- * OUT to the entities in its own facts — is kept as real [[wikilinks]]:
- * that's just one page with a few hundred outgoing links, a normal table of
- * contents, not the many-to-few fan-in that made the old design a problem.
- * If it still clutters Graph view, exclude those 5 known paths via Filters
- * rather than stripping the links — the pages stay just as useful to read
- * and click through either way.
+ * The other direction — a category page (decision.md, project.md, ...)
+ * linking OUT to the entities in its own facts — is kept as real
+ * [[wikilinks]]: a table of contents for a category with dozens to a few
+ * hundred facts is exactly the many-to-few fan-out Graph view can render
+ * usefully. fact.md is the exception: it's the generic catch-all category
+ * (over half of all facts land there), so its link count scales into the
+ * thousands and turns fact.md itself into a hub as bad as the one this
+ * design was built to avoid. Its entity mentions render as plain text
+ * instead — still readable, just not a graph edge.
  *
  * Two entities that co-occur in only one fact are also not linked — one
  * incidental shared mention (both happen to sit in the same sentence about
@@ -78,6 +80,7 @@ export function registerExportVault(program: Command): void {
         const link = (entity: string) => `[[entities/${entitySlug.get(entity)}|${entity}]]`;
         const entityLinks = (list: string[]) =>
           list.length ? ` _(${list.map(link).join(', ')})_` : '';
+        const entityMentions = (list: string[]) => (list.length ? ` _(${list.join(', ')})_` : '');
 
         const byCategory = new Map<string, Fact[]>();
         const byEntity = new Map<string, Fact[]>();
@@ -110,8 +113,9 @@ export function registerExportVault(program: Command): void {
 
         for (const [category, list] of byCategory) {
           const lines = [`# ${category}`, ''];
+          const mentions = category === 'fact' ? entityMentions : entityLinks;
           for (const f of list) {
-            lines.push(`- ${f.statement}${entityLinks(f.entities)} <!-- fact:${f.id} source:${f.source} -->`);
+            lines.push(`- ${f.statement}${mentions(f.entities)} <!-- fact:${f.id} source:${f.source} -->`);
           }
           await writeFile(path.join(opts.out, `${category}.md`), lines.join('\n') + '\n');
         }
