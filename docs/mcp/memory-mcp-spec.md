@@ -265,10 +265,15 @@ across 6 devices as of this writing, growing nightly via the automated pull —
 see Decisions §3), OpenCode (94 local sessions via
 `deploy/export-opencode-sessions.py`, reading OpenCode's SQLite store
 directly and writing memory-mcp's native ingest JSON shape — 747 chunks, 15
-real secrets caught by the scrubber), and VS Code's native Chat panel (5
-local sessions via `deploy/export-vscode-sessions.py`, same pattern against
-VS Code Server's global session-store.db — 159 chunks, 2 real secrets
-caught). VS Code's export shape is identical to OpenCode's, so a real
+real secrets caught by the scrubber), and VS Code's native Chat panel (42
+sessions across 5 hosts — GX10 plus 4 remotes pulled via
+`deploy/pull-vscode-dbs.sh`, transformed by `deploy/export-vscode-sessions.py`
+against VS Code's global session-store.db — 640 chunks, 14 real secrets
+caught). A 5th host (Fractal) has a real store but its main db file was
+mid-write at pull time (a 4KB header next to a 150KB+ unmerged .db-wal);
+recoverable only by that host's own VS Code checkpointing it, not from
+here — see `pull-vscode-dbs.sh`'s comments. VS Code's export shape is
+identical to OpenCode's, so a real
 `vscode` SourceTool was added and `parseOpencode` parameterized rather than
 mislabeling provenance. ChatGPT/Claude exports not yet ingested. Surfaced
 and fixed a real bug: the embedder batched purely by text count, and
@@ -367,17 +372,20 @@ verified. Items marked **open** are genuinely undecided/undone, not guessed at.
 2. **Postgres placement** — **Decided: local.** A dedicated Postgres 17 container
    in this compose, self-contained on the host, as built (`memory-postgres`).
 3. **Device sync** — **Decided: pull, not Syncthing.** `deploy/pull-remote-sessions.sh`
-   runs ahead of the nightly ingest, pulling from each configured device
-   over SSH (rsync for Linux/macOS, SFTP/scp for Windows — no rsync there)
-   rather than a push-based Syncthing folder per device. Six devices are
-   live: this host plus five remote hosts across three OSes, reached via a
-   mix of direct LAN, WireGuard, and SSH tunnels/jump paths depending on
-   what each one's network actually allows.
+   (Claude Code) and `deploy/pull-vscode-dbs.sh` (VS Code) both run ahead of
+   the nightly ingest, pulling from each configured device over SSH (rsync
+   for Linux/macOS, SFTP/scp for Windows — no rsync there) rather than a
+   push-based Syncthing folder per device. Six devices are live: this host
+   plus five remote hosts across three OSes, reached via a mix of direct
+   LAN, WireGuard, and SSH tunnels/jump paths depending on what each one's
+   network actually allows.
 4. **Source priority** — **Decided: Claude Code JSONL, OpenCode, VS Code Chat
-   panel**, all three confirmed by real use — 229+ Claude Code sessions
-   across 6 devices, 94 OpenCode sessions, and 5 VS Code sessions, all
-   ingested from this host's local SQLite stores (see Step 3). ChatGPT/
-   Claude exports haven't been tried yet.
+   panel**, all three confirmed by real use, and all three now pulled from
+   every device that has them, not just this host — 229+ Claude Code
+   sessions across 6 devices, 94 OpenCode sessions (this host only —
+   OpenCode wasn't found on the others), and 42 VS Code sessions across 5
+   of the 6 devices (see Step 3). ChatGPT/Claude exports haven't been tried
+   yet.
 5. **Obsidian vault export** — **Decided: included in v1, exercised against
    real data, and scheduled.** `memoryctl export-vault` runs against
    `/srv/memory` (mounted straight through to the container), writing one
