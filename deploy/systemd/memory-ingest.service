@@ -22,5 +22,12 @@ ExecStart=/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memory
 # Re-export active facts to markdown and push into the Obsidian vault, so
 # approved facts show up there without a manual step. Opt-in via
 # OBSIDIAN_PUSH_HOST/OBSIDIAN_VAULT_PATH in pull-remote-sessions.env.
-ExecStart=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl export-vault --out /srv/memory/export/vault
-ExecStart=-/srv/memory/deploy/push-obsidian-vault.sh
+# ExecStopPost, not ExecStart: these must run even when distill exits
+# non-zero (which aborts the ExecStart chain and marks the unit failed) —
+# a distill failure should surface in systemd without holding the vault's
+# daily notes hostage. triage runs first so the night's candidates are
+# auto-resolved (dupes/ephemera rejected, the rest approved) and the
+# approved facts land in the same night's export.
+ExecStopPost=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl triage
+ExecStopPost=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl export-vault --out /srv/memory/export/vault
+ExecStopPost=-/srv/memory/deploy/push-obsidian-vault.sh

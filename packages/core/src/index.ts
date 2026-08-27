@@ -23,6 +23,7 @@ export {
   type ReviewItem,
   type ApproveResult,
 } from './distill/review.js';
+export { triagePending, type TriageReport } from './distill/triage.js';
 export { remember, checkSupersedes, type RememberResult } from './remember.js';
 export { memoryStats, type MemoryStats } from './stats.js';
 export {
