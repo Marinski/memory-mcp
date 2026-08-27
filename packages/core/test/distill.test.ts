@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateProposals, distillPending } from '../src/distill/extract.js';
-import { extractJson } from '../src/distill/llm.js';
+import { extractJson, createLlmClient, TruncatedLlmResponseError } from '../src/distill/llm.js';
 import { checkSupersedes } from '../src/remember.js';
 import type { Fact } from '../src/db/facts.js';
 import type { LlmClient } from '../src/distill/llm.js';
@@ -16,6 +16,31 @@ describe('extractJson', () => {
   it('tolerates trailing prose and strings containing brackets', () => {
     expect(extractJson('Sure! [1,2] hope that helps')).toEqual([1, 2]);
     expect(extractJson('{"a":"has ] and } inside"} trailing words')).toEqual({ a: 'has ] and } inside' });
+  });
+
+  it('repairs raw control characters the model emits inside string literals', () => {
+    // gemma4 occasionally emits a literal newline mid-string; JSON.parse
+    // rejects that ("Bad control character in string literal")
+    expect(extractJson('{"a":"line one\nline two\ttabbed"}')).toEqual({ a: 'line one\nline two\ttabbed' });
+    expect(extractJson('[{"s":"xy"}]')).toEqual([{ s: 'xy' }]);
+    // escape sequences and structure outside strings stay untouched
+    expect(extractJson('{"a":"already\\nescaped"}')).toEqual({ a: 'already\nescaped' });
+  });
+});
+
+describe('createLlmClient', () => {
+  it('throws TruncatedLlmResponseError when finish_reason is length', async () => {
+    const fetchImpl = (async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '[{"statement":"cut off' }, finish_reason: 'length' }],
+      }),
+    })) as unknown as typeof fetch;
+    const llm = createLlmClient(
+      { aigateBaseUrl: 'http://x/v1', aigateApiKey: 'k', distillModel: 'm' },
+      fetchImpl,
+    );
+    await expect(llm.complete('s', 'u')).rejects.toBeInstanceOf(TruncatedLlmResponseError);
   });
 });
 
@@ -113,6 +138,51 @@ describe('distillPending', () => {
     // both ledger entries still get marked distilled — a retry at temperature:0
     // would reproduce the same unparseable response
     expect((pool as unknown as { _distilledIds: string[] })._distilledIds).toEqual(['e1', 'e2']);
+  });
+
+  it('retries a truncated response with a halved transcript', async () => {
+    const pool = fakePool();
+    const seenLengths: number[] = [];
+    const llm: LlmClient = {
+      complete: async (_system, user) => {
+        seenLengths.push(user.length);
+        // a token-dense transcript overflows the context window until halved
+        if (user.length > 30_000) throw new TruncatedLlmResponseError();
+        return '[{"statement":"uses pnpm","category":"fact","entities":[],"confidence":0.9}]';
+      },
+    };
+    const chunksBySession: Record<string, string[]> = {
+      'bad-session': ['x'.repeat(60_000)],
+      'good-session': ['good content'],
+    };
+    const report = await distillPending({
+      pool,
+      llm,
+      getSessionChunks: async (sid) => chunksBySession[sid],
+    });
+
+    expect(report.sessionsProcessed).toBe(2);
+    expect(report.proposals).toBe(2);
+    expect(report.failures).toHaveLength(0);
+    // 48k cap first, then halved to 24k, which fits
+    expect(seenLengths.filter((l) => l > 30_000)).toHaveLength(1);
+  });
+
+  it('retries an unbalanced-JSON response the same way — truncation the gateway mislabeled as stop', async () => {
+    const pool = fakePool();
+    const llm: LlmClient = {
+      complete: async (_system, user) =>
+        user.length > 30_000
+          ? '[{"statement":"cut off mid-arr'
+          : '[{"statement":"uses pnpm","category":"fact","entities":[],"confidence":0.9}]',
+    };
+    const report = await distillPending({
+      pool,
+      llm,
+      getSessionChunks: async () => ['x'.repeat(60_000)],
+    });
+    expect(report.failures).toHaveLength(0);
+    expect(report.sessionsProcessed).toBe(2);
   });
 });
 

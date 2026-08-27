@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { LlmClient } from './llm.js';
-import { extractJson } from './llm.js';
+import { extractJson, TruncatedLlmResponseError, UnbalancedJsonError } from './llm.js';
 import { undistilledLedgerEntries, ledgerSessionIds, markDistilled } from '../db/ledger.js';
 import type { FactCategory } from '../db/facts.js';
 
@@ -22,6 +22,9 @@ Return ONLY a JSON array. Each element:
 {"statement": string, "category": "preference"|"decision"|"fact"|"project"|"person", "entities": string[], "confidence": number 0..1}
 Rules:
 - Only long-lived facts (preferences, decisions, project/people facts). No ephemera, no session mechanics.
+- No solved problems or debugging narratives: that an error occurred, was investigated, or was fixed is
+  ephemera. If a fix produced a durable gotcha, decision, or configuration, state THAT as the fact;
+  otherwise extract nothing from it.
 - statement is a single self-contained sentence.
 - entities are the short canonical names of recurring real-world things the statement is ABOUT — a project, tool,
   service, host/server, person, or company the user would plausibly ask about again later. Not any noun phrase
@@ -86,13 +89,20 @@ export interface DistillReport {
   failures: DistillFailure[];
 }
 
-const MAX_TRANSCRIPT_CHARS = 48_000; // ~12k tokens fits gemma's 16k window
+// ~12k tokens at prose density (~4 chars/token) fits gemma's 16k window,
+// but code-heavy transcripts tokenize denser (~3 chars/token) and can fill
+// the whole window, truncating the JSON answer — hence the halving retry
+// below, down to a floor that always leaves room for output.
+const MAX_TRANSCRIPT_CHARS = 48_000;
+const MIN_TRANSCRIPT_CHARS = 12_000;
 
 /**
- * Walks un-distilled ledger entries. A single session whose LLM response
- * can't be parsed (temperature:0, so a retry wouldn't help) is recorded as a
- * failure and skipped rather than aborting every other session in the run —
- * same reasoning as the ingest pipeline's quarantine-vs-abort split.
+ * Walks un-distilled ledger entries. A truncated LLM answer (transcript so
+ * token-dense the prompt filled the model's context window) is retried with
+ * a halved transcript; a response that still can't be parsed (temperature:0,
+ * so a same-input retry wouldn't help) is recorded as a failure and skipped
+ * rather than aborting every other session in the run — same reasoning as
+ * the ingest pipeline's quarantine-vs-abort split.
  */
 export async function distillPending(deps: DistillDeps): Promise<DistillReport> {
   const { pool, llm, getSessionChunks } = deps;
@@ -106,13 +116,28 @@ export async function distillPending(deps: DistillDeps): Promise<DistillReport> 
     for (const sid of sessionIds) {
       const chunks = await getSessionChunks(sid);
       if (chunks.length === 0) continue;
-      const transcript = chunks.join('\n\n').slice(0, MAX_TRANSCRIPT_CHARS);
+      const fullTranscript = chunks.join('\n\n');
       try {
-        const response = await llm.complete(
-          SYSTEM,
-          `<transcript>\n${transcript}\n</transcript>`,
-        );
-        const facts = validateProposals(extractJson(response));
+        let cap = MAX_TRANSCRIPT_CHARS;
+        let facts: ProposedFact[];
+        for (;;) {
+          try {
+            const response = await llm.complete(
+              SYSTEM,
+              `<transcript>\n${fullTranscript.slice(0, cap)}\n</transcript>`,
+            );
+            facts = validateProposals(extractJson(response));
+            break;
+          } catch (err) {
+            const truncated =
+              err instanceof TruncatedLlmResponseError || err instanceof UnbalancedJsonError;
+            if (truncated && cap >= MIN_TRANSCRIPT_CHARS * 2) {
+              cap = Math.floor(cap / 2);
+              continue;
+            }
+            throw err;
+          }
+        }
         for (const f of facts) {
           await pool.query(
             `INSERT INTO review_queue (proposed_fact, session_ref) VALUES ($1::jsonb, $2)`,
@@ -125,9 +150,10 @@ export async function distillPending(deps: DistillDeps): Promise<DistillReport> 
         failures.push({ sessionId: sid, error: err instanceof Error ? err.message : String(err) });
       }
     }
-    // Mark distilled regardless of failure: at temperature:0 a re-run
-    // reproduces the same unparseable response, so retrying gains nothing —
-    // surfacing it in `failures` is the actionable outcome, not a retry loop.
+    // Mark distilled regardless of failure: truncation was already retried
+    // with shorter input above, and at temperature:0 a same-input re-run
+    // reproduces the same unparseable response, so a later re-run gains
+    // nothing — surfacing it in `failures` is the actionable outcome.
     await markDistilled(pool, entry.id);
   }
   return { sessionsProcessed, proposals, failures };
