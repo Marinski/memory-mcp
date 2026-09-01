@@ -6,6 +6,24 @@ project does not yet use semantic version tags.
 
 ## [Unreleased]
 
+### Added
+- **Project scope** on facts and archive. `remember`, `search_memory`,
+  `search_archive`, and `list_recent_sessions` accept an optional `project`;
+  facts gained a nullable `project` column (idempotent `ALTER`) and
+  project-scoped search excludes project-less results.
+- **`memoryctl backfill-projects`** — repopulates NULL `facts.project` from
+  session provenance via Qdrant (provenance repair only; `updated_at`
+  untouched; unscoped sessions stay NULL rather than guessing wrong).
+- **`list_recent_sessions`** MCP tool — bounded, payload-projected scan of
+  the archive returning the most-recently-started sessions, newest first,
+  with source tool, project, chunk count, and start time.
+- **`search_archive_timeline`** MCP tool — ordered chunks immediately before
+  and after an archive hit within its session (window clamped `[0, 50]`).
+- **Staleness observability.** `memoryctl staleness --older-than/--recent`
+  reports aged active facts and recent superseded facts; the
+  `memory://recent/superseded` resource exposes the churn log; wired into the
+  nightly systemd pass.
+
 ### Changed
 - Genericized deployment docs, spec, and a few test fixtures ahead of the
   public release — hardware/host nicknames, internal gateway project names,

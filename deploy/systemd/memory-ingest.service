@@ -29,5 +29,6 @@ ExecStart=/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memory
 # auto-resolved (dupes/ephemera rejected, the rest approved) and the
 # approved facts land in the same night's export.
 ExecStopPost=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl triage
+ExecStopPost=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl staleness
 ExecStopPost=-/usr/bin/docker compose -f compose.prod.yaml exec -T memory-mcp memoryctl export-vault --out /srv/memory/export/vault
 ExecStopPost=-/srv/memory/deploy/push-obsidian-vault.sh

@@ -188,7 +188,7 @@ describe('distillPending', () => {
 
 describe('checkSupersedes', () => {
   const fact = (id: string, statement: string): Fact =>
-    ({ id, statement, category: 'preference', entities: [], confidence: 1, source: 'user', provenance: [], status: 'active', superseded_by: null, created_at: new Date(), updated_at: new Date() });
+    ({ id, statement, category: 'preference', entities: [], confidence: 1, source: 'user', provenance: [], project: null, status: 'active', superseded_by: null, created_at: new Date(), updated_at: new Date() });
 
   it('returns only ids the LLM names that exist among candidates', async () => {
     const llm: LlmClient = { complete: async () => '["f1","bogus"]' };

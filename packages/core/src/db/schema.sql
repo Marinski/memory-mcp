@@ -14,12 +14,14 @@ CREATE TABLE IF NOT EXISTS facts (
   confidence    real NOT NULL DEFAULT 1.0,
   source        text NOT NULL CHECK (source IN ('user','distilled','imported')),
   provenance    jsonb NOT NULL DEFAULT '[]',
+  project       text NULL,
   status        text NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','deleted')),
   superseded_by uuid NULL REFERENCES facts(id),
   tsv           tsvector GENERATED ALWAYS AS (to_tsvector('simple', statement)) STORED,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE facts ADD COLUMN IF NOT EXISTS project text NULL;
 CREATE INDEX IF NOT EXISTS facts_tsv_idx ON facts USING gin (tsv);
 CREATE INDEX IF NOT EXISTS facts_status_idx ON facts (status);
 CREATE INDEX IF NOT EXISTS facts_entities_idx ON facts USING gin (entities);

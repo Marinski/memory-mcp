@@ -34,6 +34,15 @@ export interface ArchiveFilter {
   session_id?: string;
 }
 
+export interface RecentSession {
+  session_id: string;
+  source_tool: string;
+  device?: string;
+  project?: string;
+  last_ts?: number;
+  chunk_count: number;
+}
+
 export interface QdrantClient {
   ensureCollection(): Promise<{ created: boolean; dims: number }>;
   collectionInfo(): Promise<{ dims: number; points: number }>;
@@ -43,6 +52,13 @@ export interface QdrantClient {
   deleteBySession(sessionId: string): Promise<void>;
   /** All chunks of one session, ordered by chunk index (point payloads). */
   scrollBySession(sessionId: string): Promise<{ id: string; payload: ChunkPayload }[]>;
+  /**
+   * Sessions aggregated from a bounded scroll over chunk payloads, most
+   * recently active first (by latest chunk ts). Precision ceiling (Q1): the
+   * scan is capped, so on a very large collection an ultra-low-activity
+   * session may never appear in a scanned page and is silently missed.
+   */
+  recentSessions(limit: number, project?: string): Promise<RecentSession[]>;
   count(): Promise<number>;
 }
 
@@ -198,6 +214,54 @@ export function createQdrantClient(
       // turn_range "3-7" sorts fine numerically on its first number
       out.sort((a, b) => parseInt(a.payload.turn_range, 10) - parseInt(b.payload.turn_range, 10));
       return out;
+    },
+
+    async recentSessions(limit, project) {
+      const seen = new Map<string, RecentSession>();
+      // Bounded scroll (Q1): cap pages so huge collections stay finite, at the
+      // cost of potentially missing an ultra-low-activity session.
+      const MAX_PAGES = 40;
+      const PAGE = 100;
+      let offset: string | number | null | undefined = undefined;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const body: QdrantScrollResponse = await req('POST', `/collections/${collection}/points/scroll`, {
+          filter: project ? { must: [{ key: 'project', match: { value: project } }] } : undefined,
+          // Project a minimal payload — the bounded scan is the hot path and
+          // each chunk's text/content_hash is irrelevant when listing sessions.
+          with_payload: ['session_id', 'source_tool', 'device', 'project', 'ts'],
+          limit: PAGE,
+          offset,
+        });
+        for (const p of body.result.points) {
+          const pl = p.payload;
+          const agg = seen.get(pl.session_id);
+          if (agg) {
+            agg.chunk_count += 1;
+            if (pl.ts !== undefined && (agg.last_ts === undefined || pl.ts > agg.last_ts)) {
+              agg.last_ts = pl.ts;
+            }
+          } else {
+            seen.set(pl.session_id, {
+              session_id: pl.session_id,
+              source_tool: pl.source_tool,
+              device: pl.device,
+              project: pl.project,
+              last_ts: pl.ts,
+              chunk_count: 1,
+            });
+          }
+        }
+        offset = body.result.next_page_offset;
+        if (offset === null || offset === undefined) break;
+      }
+      const sessions = [...seen.values()];
+      sessions.sort((a, b) => {
+        if (a.last_ts === undefined && b.last_ts === undefined) return 0;
+        if (a.last_ts === undefined) return 1;
+        if (b.last_ts === undefined) return -1;
+        return b.last_ts - a.last_ts;
+      });
+      return sessions.slice(0, limit);
     },
 
     async count() {

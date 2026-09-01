@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`memory-mcp surface > tools/list snapshot — four tools with stable names and schemas 1`] = `
+exports[`memory-mcp surface > tools/list snapshot — six tools with stable names and schemas 1`] = `
 [
   {
     "inputProps": [
@@ -12,8 +12,16 @@ exports[`memory-mcp surface > tools/list snapshot — four tools with stable nam
   },
   {
     "inputProps": [
+      "limit",
+      "project",
+    ],
+    "name": "list_recent_sessions",
+  },
+  {
+    "inputProps": [
       "category",
       "entities",
+      "project",
       "statement",
     ],
     "name": "remember",
@@ -31,8 +39,17 @@ exports[`memory-mcp surface > tools/list snapshot — four tools with stable nam
   },
   {
     "inputProps": [
+      "around_chunk_id",
+      "session_id",
+      "window",
+    ],
+    "name": "search_archive_timeline",
+  },
+  {
+    "inputProps": [
       "category",
       "limit",
+      "project",
       "query",
     ],
     "name": "search_memory",

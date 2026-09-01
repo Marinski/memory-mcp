@@ -65,6 +65,7 @@ export async function approveReview(
       confidence: edited?.confidence ?? proposed.confidence,
       source: 'distilled',
       provenance: [{ session_id: sessionRef }],
+      project: edited?.project ?? proposed.project,
     });
     for (const oldId of stale) {
       await markSuperseded(client, oldId, fact.id);

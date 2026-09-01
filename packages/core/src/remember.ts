@@ -55,7 +55,7 @@ export async function checkSupersedes(
 export async function remember(
   pool: Pool,
   llm: LlmClient,
-  input: { statement: string; category?: FactCategory; entities?: string[] },
+  input: { statement: string; category?: FactCategory; entities?: string[]; project?: string },
 ): Promise<RememberResult> {
   const category = input.category ?? 'fact';
   const entities = input.entities ?? [];
@@ -75,6 +75,7 @@ export async function remember(
       entities,
       confidence: 1.0,
       source: 'user',
+      project: input.project,
     });
     for (const oldId of stale) {
       await markSuperseded(client, oldId, fact.id);

@@ -30,7 +30,7 @@ function fakePool(pending: ReturnType<typeof candidate>[], activeStatements: str
           rows: [{
             id: `fact-${approvedFacts.length}`, statement: params![0], category: params![1],
             entities: params![2], confidence: params![3], source: params![4],
-            provenance: [], status: 'active', superseded_by: null,
+            provenance: [], project: (params![6] as string | null) ?? null, status: 'active', superseded_by: null,
             created_at: new Date(), updated_at: new Date(),
           }],
         };

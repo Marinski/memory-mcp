@@ -20,6 +20,7 @@ export interface Fact {
   confidence: number;
   source: FactSource;
   provenance: ProvenanceRef[];
+  project: string | null;
   status: FactStatus;
   superseded_by: string | null;
   created_at: Date;
@@ -33,15 +34,17 @@ export interface NewFact {
   confidence?: number;
   source: FactSource;
   provenance?: ProvenanceRef[];
+  /** Optional project scope, mirroring the archive's session-level project. */
+  project?: string | null;
 }
 
 const FACT_COLS =
-  'id, statement, category, entities, confidence, source, provenance, status, superseded_by, created_at, updated_at';
+  'id, statement, category, entities, confidence, source, provenance, project, status, superseded_by, created_at, updated_at';
 
 export async function createFact(pool: Queryable, f: NewFact): Promise<Fact> {
   const res = await pool.query(
-    `INSERT INTO facts (statement, category, entities, confidence, source, provenance)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+    `INSERT INTO facts (statement, category, entities, confidence, source, provenance, project)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
      RETURNING ${FACT_COLS}`,
     [
       f.statement,
@@ -50,6 +53,7 @@ export async function createFact(pool: Queryable, f: NewFact): Promise<Fact> {
       f.confidence ?? 1.0,
       f.source,
       JSON.stringify(f.provenance ?? []),
+      f.project ?? null,
     ],
   );
   return res.rows[0] as Fact;
@@ -122,13 +126,15 @@ export async function fullTextFacts(
   query: string,
   category: FactCategory | undefined,
   limit: number,
+  project?: string,
 ): Promise<Fact[]> {
   const res = await pool.query(
     `SELECT ${FACT_COLS}, ts_rank(tsv, q) AS rank
      FROM facts, websearch_to_tsquery('simple', $1) q
      WHERE status = 'active' AND tsv @@ q AND ($2::text IS NULL OR category = $2)
-     ORDER BY rank DESC LIMIT $3`,
-    [query, category ?? null, limit],
+       AND ($3::text IS NULL OR project = $3)
+     ORDER BY rank DESC LIMIT $4`,
+    [query, category ?? null, project ?? null, limit],
   );
   return res.rows as Fact[];
 }
