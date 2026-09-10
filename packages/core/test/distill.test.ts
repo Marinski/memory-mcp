@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { validateProposals, distillPending } from '../src/distill/extract.js';
-import { extractJson, createLlmClient, TruncatedLlmResponseError } from '../src/distill/llm.js';
+import {
+  extractJson,
+  createLlmClient,
+  TruncatedLlmResponseError,
+  LlmTimeoutError,
+  LIVE_LLM_TIMEOUT_MS,
+  BATCH_LLM_TIMEOUT_MS,
+  MAX_USER_PROMPT_CHARS,
+} from '../src/distill/llm.js';
 import { checkSupersedes } from '../src/remember.js';
 import type { Fact } from '../src/db/facts.js';
 import type { LlmClient } from '../src/distill/llm.js';
@@ -41,6 +49,81 @@ describe('createLlmClient', () => {
       fetchImpl,
     );
     await expect(llm.complete('s', 'u')).rejects.toBeInstanceOf(TruncatedLlmResponseError);
+  });
+});
+
+describe('LlmTimeoutError', () => {
+  /** Fake fetch that never resolves but honours the abort signal. */
+  const neverResolves: typeof fetch = (_url, init) =>
+    new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      });
+    });
+
+  const cfg = { aigateBaseUrl: 'http://x/v1', aigateApiKey: 'k', distillModel: 'm' };
+
+  it('throws LlmTimeoutError when signal aborts (simulates LIVE tier)', async () => {
+    const llm = createLlmClient(cfg, neverResolves);
+    await expect(llm.complete('s', 'u', { timeoutMs: 10 })).rejects.toBeInstanceOf(LlmTimeoutError);
+  });
+
+  it('throws LlmTimeoutError when signal aborts (simulates BATCH tier)', async () => {
+    const llm = createLlmClient(cfg, neverResolves);
+    await expect(
+      llm.complete('s', 'u', { timeoutMs: 10 }),
+    ).rejects.toBeInstanceOf(LlmTimeoutError);
+  });
+
+  it('exports timeout constants with expected values', () => {
+    expect(LIVE_LLM_TIMEOUT_MS).toBe(20_000);
+    expect(BATCH_LLM_TIMEOUT_MS).toBe(300_000);
+    expect(MAX_USER_PROMPT_CHARS).toBe(48_000);
+  });
+});
+
+describe('user prompt truncation', () => {
+  it('truncates user to MAX_USER_PROMPT_CHARS', async () => {
+    let capturedUser: string | undefined;
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      capturedUser = body.messages?.[1]?.content;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'ok' } }],
+        }),
+      } as Response;
+    };
+    const llm = createLlmClient(
+      { aigateBaseUrl: 'http://x/v1', aigateApiKey: 'k', distillModel: 'm' },
+      fetchImpl,
+    );
+    const longUser = 'x'.repeat(100_000);
+    const result = await llm.complete('s', longUser);
+    expect(result).toBe('ok');
+    expect(capturedUser!.length).toBe(MAX_USER_PROMPT_CHARS);
+  });
+
+  it('does not truncate when under the limit', async () => {
+    let capturedUser: string | undefined;
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      capturedUser = body.messages?.[1]?.content;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'ok' } }],
+        }),
+      } as Response;
+    };
+    const llm = createLlmClient(
+      { aigateBaseUrl: 'http://x/v1', aigateApiKey: 'k', distillModel: 'm' },
+      fetchImpl,
+    );
+    const shortUser = 'hello';
+    await llm.complete('s', shortUser);
+    expect(capturedUser).toBe('hello');
   });
 });
 
