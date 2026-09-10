@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { triagePending } from '../src/distill/triage.js';
 import type { Pool } from 'pg';
 import type { LlmClient } from '../src/distill/llm.js';
+import { LlmTimeoutError } from '../src/distill/llm.js';
 import type { ProposedFact } from '../src/distill/extract.js';
 
 function candidate(id: string, statement: string, confidence = 0.9): {
@@ -109,6 +110,20 @@ describe('triagePending', () => {
   it('leaves a batch pending when the judge response is unparseable twice', async () => {
     const judge: LlmClient = { complete: async () => 'not json at all' };
     const { pool, rejected } = fakePool([candidate('c1', 'Something'), candidate('c2', 'Else')], []);
+    const report = await triagePending(pool, judge);
+    expect(rejected).toEqual([]);
+    expect(report.leftPending).toBe(2);
+    expect(report.approved).toBe(0);
+  });
+
+  it('falls back to leftPending when the judge batch times out twice', async () => {
+    const judge: LlmClient = {
+      complete: async () => { throw new LlmTimeoutError(); },
+    };
+    const { pool, rejected } = fakePool(
+      [candidate('c1', 'Something'), candidate('c2', 'Else')],
+      [],
+    );
     const report = await triagePending(pool, judge);
     expect(rejected).toEqual([]);
     expect(report.leftPending).toBe(2);

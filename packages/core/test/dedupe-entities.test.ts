@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { groupCandidates, validateMerges } from '../src/dedupe-entities.js';
+import { groupCandidates, validateMerges, findDuplicateEntities } from '../src/dedupe-entities.js';
+import { LlmTimeoutError } from '../src/distill/llm.js';
+import type { LlmClient } from '../src/distill/llm.js';
+import type { Pool } from 'pg';
 
 describe('groupCandidates', () => {
   it('groups pure case variants', () => {
@@ -99,5 +102,56 @@ describe('validateMerges', () => {
       group,
     );
     expect(out).toHaveLength(1);
+  });
+});
+
+describe('findDuplicateEntities timeout retry', () => {
+  /** Fake pool returning two facts whose entities form a candidate group. */
+  function fakePool(): Pool {
+    const facts = [
+      {
+        id: 'f1', statement: 'Uses OpenCode daily', category: 'fact',
+        entities: ['OpenCode'], confidence: 0.9, source: 'distilled',
+        provenance: [], project: null, status: 'active',
+        superseded_by: null, created_at: new Date(), updated_at: new Date(),
+      },
+      {
+        id: 'f2', statement: 'Prefers opencode over cursor', category: 'preference',
+        entities: ['opencode'], confidence: 0.8, source: 'distilled',
+        provenance: [], project: null, status: 'active',
+        superseded_by: null, created_at: new Date(), updated_at: new Date(),
+      },
+    ];
+    return {
+      query: async (sql: string) => {
+        if (sql.includes('FROM facts WHERE status')) return { rows: facts };
+        throw new Error(`unexpected query: ${sql}`);
+      },
+    } as unknown as Pool;
+  }
+
+  it('absorbs first LlmTimeoutError and retries, then succeeds', async () => {
+    let calls = 0;
+    const llm: LlmClient = {
+      complete: async (_s, _u, _opts) => {
+        calls += 1;
+        if (calls === 1) throw new LlmTimeoutError();
+        return JSON.stringify([{ canonical: 'OpenCode', members: ['OpenCode', 'opencode'], reason: 'case variant' }]);
+      },
+    };
+    const report = await findDuplicateEntities(fakePool(), llm);
+    expect(report.proposals).toHaveLength(1);
+    expect(report.failures).toHaveLength(0);
+    expect(calls).toBe(2);
+  });
+
+  it('surfaces failure when two consecutive LlmTimeoutErrors occur', async () => {
+    const llm: LlmClient = {
+      complete: async () => { throw new LlmTimeoutError(); },
+    };
+    const report = await findDuplicateEntities(fakePool(), llm);
+    expect(report.proposals).toHaveLength(0);
+    expect(report.failures).toHaveLength(1);
+    expect(report.failures[0].error).toBe('LLM request timed out');
   });
 });

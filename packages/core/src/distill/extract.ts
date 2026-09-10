@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { LlmClient } from './llm.js';
-import { extractJson, TruncatedLlmResponseError, UNTRUSTED_DATA_SUFFIX, UnbalancedJsonError } from './llm.js';
+import { extractJson, LlmTimeoutError, BATCH_LLM_TIMEOUT_MS, TruncatedLlmResponseError, UNTRUSTED_DATA_SUFFIX, UnbalancedJsonError } from './llm.js';
 import { undistilledLedgerEntries, ledgerSessionIds, markDistilled } from '../db/ledger.js';
 import type { FactCategory } from '../db/facts.js';
 
@@ -136,10 +136,21 @@ export async function distillPending(deps: DistillDeps): Promise<DistillReport> 
             const response = await llm.complete(
               SYSTEM,
               `<transcript>\n${fullTranscript.slice(0, cap)}\n</transcript>`,
+              { timeoutMs: BATCH_LLM_TIMEOUT_MS },
             );
             facts = validateProposals(extractJson(response));
             break;
           } catch (err) {
+            if (err instanceof LlmTimeoutError) {
+              // One-shot retry: first timeout absorbed, second surfaces
+              const response = await llm.complete(
+                SYSTEM,
+                `<transcript>\n${fullTranscript.slice(0, cap)}\n</transcript>`,
+                { timeoutMs: BATCH_LLM_TIMEOUT_MS },
+              );
+              facts = validateProposals(extractJson(response));
+              break;
+            }
             const truncated =
               err instanceof TruncatedLlmResponseError || err instanceof UnbalancedJsonError;
             if (truncated && cap >= MIN_TRANSCRIPT_CHARS * 2) {

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { LlmClient } from './llm.js';
-import { extractJson, UNTRUSTED_DATA_SUFFIX } from './llm.js';
+import { extractJson, BATCH_LLM_TIMEOUT_MS, UNTRUSTED_DATA_SUFFIX } from './llm.js';
 import { pendingReviews, approveReview, rejectReview, type ReviewItem } from './review.js';
 
 /**
@@ -55,7 +55,7 @@ async function judgeBatch(llm: LlmClient, batch: ReviewItem[]): Promise<Map<numb
   const listing = batch
     .map((item, i) => `${i}. [${item.proposed_fact.category}] ${item.proposed_fact.statement}`)
     .join('\n');
-  const response = await llm.complete(SYSTEM, listing);
+  const response = await llm.complete(SYSTEM, listing, { timeoutMs: BATCH_LLM_TIMEOUT_MS });
   const verdicts = extractJson<Verdict[]>(response);
   const byIndex = new Map<number, string>();
   if (Array.isArray(verdicts)) {

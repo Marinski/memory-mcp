@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { listRecentFacts, type Fact } from './db/facts.js';
-import { extractJson, UNTRUSTED_DATA_SUFFIX, type LlmClient } from './distill/llm.js';
+import { extractJson, UNTRUSTED_DATA_SUFFIX, BATCH_LLM_TIMEOUT_MS, LlmTimeoutError, type LlmClient } from './distill/llm.js';
 
 /**
  * Finds entity names in the facts store that likely refer to the same
@@ -200,7 +200,17 @@ export async function findDuplicateEntities(pool: Pool, llm: LlmClient): Promise
       })
       .join('\n\n');
     try {
-      const response = await llm.complete(SYSTEM, prompt);
+      let response: string;
+      try {
+        response = await llm.complete(SYSTEM, prompt, { timeoutMs: BATCH_LLM_TIMEOUT_MS });
+      } catch (err) {
+        if (err instanceof LlmTimeoutError) {
+          // One-shot retry: first timeout absorbed
+          response = await llm.complete(SYSTEM, prompt, { timeoutMs: BATCH_LLM_TIMEOUT_MS });
+        } else {
+          throw err;
+        }
+      }
       proposals.push(...validateMerges(extractJson(response), groupSet));
     } catch (err) {
       failures.push({ group, error: err instanceof Error ? err.message : String(err) });

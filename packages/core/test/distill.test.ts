@@ -267,6 +267,46 @@ describe('distillPending', () => {
     expect(report.failures).toHaveLength(0);
     expect(report.sessionsProcessed).toBe(2);
   });
+
+  it('absorbs first LlmTimeoutError and retries, then succeeds', async () => {
+    const pool = fakePool();
+    let calls = 0;
+    const llm: LlmClient = {
+      complete: async (_system, _user, _opts) => {
+        calls += 1;
+        if (calls === 1) throw new LlmTimeoutError();
+        return '[{"statement":"uses pnpm","category":"fact","entities":[],"confidence":0.9}]';
+      },
+    };
+    const report = await distillPending({
+      pool,
+      llm,
+      getSessionChunks: async () => ['good content'],
+    });
+    // fakePool has two entries (e1→bad-session, e2→good-session), both processed
+    expect(report.sessionsProcessed).toBe(2);
+    expect(report.proposals).toBe(2);
+    expect(report.failures).toHaveLength(0);
+    // 1st call times out, 2nd succeeds (retry), then the 3rd session succeeds on first try
+    expect(calls).toBe(3);
+  });
+
+  it('surfaces failure when two consecutive LlmTimeoutErrors occur', async () => {
+    const pool = fakePool();
+    const llm: LlmClient = {
+      complete: async () => { throw new LlmTimeoutError(); },
+    };
+    const report = await distillPending({
+      pool,
+      llm,
+      getSessionChunks: async () => ['good content'],
+    });
+    // fakePool has two entries, both fail with double timeout
+    expect(report.sessionsProcessed).toBe(0);
+    expect(report.proposals).toBe(0);
+    expect(report.failures).toHaveLength(2);
+    expect(report.failures[0].error).toBe('LLM request timed out');
+  });
 });
 
 describe('checkSupersedes', () => {
