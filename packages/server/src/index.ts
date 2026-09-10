@@ -24,6 +24,14 @@ export function createApp(deps: ServerDeps): express.Express {
   const app = express();
   app.use(express.json({ limit: '128kb' }));
 
+  // Security header: prevent MIME-type sniffing.  Chosen over helmet() to
+  // avoid the dependency for a single header.  Reconsider helmet if we add
+  // more headers (CSP, HSTS, X-Frame-Options, etc.) or if the list grows.
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+
   const mcpRateLimit = rateLimit({
     windowMs: 60 * 1000,
     limit: 120,
