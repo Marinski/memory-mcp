@@ -1,4 +1,5 @@
 import express from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { pathToFileURL } from 'node:url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -21,13 +22,27 @@ import type { ServerDeps } from './deps.js';
 
 export function createApp(deps: ServerDeps): express.Express {
   const app = express();
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '128kb' }));
+
+  const mcpRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Too Many Requests' },
+        id: null,
+      });
+    },
+  });
 
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, service: 'memory-mcp' });
   });
 
-  app.post('/mcp', authMiddleware(deps.cfg), async (req, res) => {
+  app.post('/mcp', mcpRateLimit, authMiddleware(deps.cfg), async (req, res) => {
     const server = buildMcpServer(deps);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless
@@ -42,10 +57,10 @@ export function createApp(deps: ServerDeps): express.Express {
   });
 
   // Stateless transport: sessionless GET/DELETE are not applicable.
-  app.get('/mcp', authMiddleware(deps.cfg), (_req, res) => {
+  app.get('/mcp', mcpRateLimit, authMiddleware(deps.cfg), (_req, res) => {
     res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method Not Allowed' }, id: null });
   });
-  app.delete('/mcp', authMiddleware(deps.cfg), (_req, res) => {
+  app.delete('/mcp', mcpRateLimit, authMiddleware(deps.cfg), (_req, res) => {
     res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method Not Allowed' }, id: null });
   });
 
