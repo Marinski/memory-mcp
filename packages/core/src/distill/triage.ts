@@ -12,7 +12,7 @@ import { pendingReviews, approveReview, rejectReview, type ReviewItem } from './
  * supersede-on-approve dedupe against active facts runs for every fact.
  */
 
-const SYSTEM = `You curate a developer's personal long-term memory. You are given numbered fact
+export const SYSTEM = `You curate a developer's personal long-term memory. You are given numbered fact
 candidates extracted from AI coding sessions. Decide for each: keep or drop.
 Drop:
 - solved problems and debugging narratives — that an error occurred, was investigated, or was

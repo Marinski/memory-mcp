@@ -19,7 +19,7 @@ export interface ProposedFact {
   project?: string;
 }
 
-const SYSTEM = `You extract durable personal facts from AI-session transcripts.
+export const SYSTEM = `You extract durable personal facts from AI-session transcripts.
 Return ONLY a JSON array. Each element:
 {"statement": string, "category": "preference"|"decision"|"fact"|"project"|"person", "entities": string[], "confidence": number 0..1, "project": string|null}
 Rules:

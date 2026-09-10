@@ -76,7 +76,7 @@ export function groupCandidates(entities: string[]): string[][] {
   return [...groups.values()].filter((g) => g.length >= 2);
 }
 
-const SYSTEM = `You resolve near-duplicate entity names in a personal knowledge base.
+export const SYSTEM = `You resolve near-duplicate entity names in a personal knowledge base.
 
 You'll be given a group of entity name strings that MIGHT refer to the same
 real-world thing (a project, tool, service, person, or company), each with a

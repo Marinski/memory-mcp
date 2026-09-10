@@ -20,7 +20,7 @@ export interface RememberResult {
   superseded: string[];
 }
 
-const SYSTEM = `You compare a NEW personal fact against OLD facts.
+export const SYSTEM = `You compare a NEW personal fact against OLD facts.
 Return ONLY a JSON array of the ids of OLD facts the NEW fact makes stale.
 An OLD fact is stale when either is true:
 - Contradicted: both cannot be true at once (a changed preference, a reversed decision, an updated value).
