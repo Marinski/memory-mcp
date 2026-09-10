@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createEmbedder } from '../src/vector/embed.js';
+import { createEmbedder, EMBED_TIMEOUT_MS } from '../src/vector/embed.js';
 
 const cfg = { aigateBaseUrl: 'http://aigate:4000/v1', aigateApiKey: 'k', embedModel: 'm', embedDims: 4 };
 
@@ -46,5 +46,41 @@ describe('createEmbedder batching', () => {
     const out = await embedder.embed([huge, 'short']);
     expect(out).toHaveLength(2);
     expect(calls[0]).toEqual([huge]);
+  });
+});
+
+describe('EMBED_TIMEOUT_MS', () => {
+  it('aborts a never-resolving fetch after the constant timeout', async () => {
+    let abortFn: (() => void) | undefined;
+    const mockTimeout = vi.fn((_ms: number) => {
+      const controller = new AbortController();
+      abortFn = () => controller.abort();
+      return controller.signal;
+    });
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(mockTimeout as typeof AbortSignal.timeout);
+
+    try {
+      let capturedSignal: AbortSignal | undefined;
+      const neverResolves = vi.fn((_url: string, init: RequestInit) => {
+        capturedSignal = init.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        });
+      });
+      const embedder = createEmbedder(cfg, neverResolves as unknown as typeof fetch);
+      const embedPromise = embedder.embed(['hello']);
+
+      expect(mockTimeout).toHaveBeenCalledWith(EMBED_TIMEOUT_MS);
+
+      abortFn!();
+
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal!.aborted).toBe(true);
+      await expect(embedPromise).rejects.toThrow();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

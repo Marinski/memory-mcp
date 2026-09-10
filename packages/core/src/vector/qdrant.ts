@@ -8,6 +8,11 @@ import type { SparseVector } from './sparse.js';
  * legs with RRF inside Qdrant.
  */
 
+/** Timeout for a single hybrid-query request to Qdrant. */
+export const QDRANT_HYBRID_TIMEOUT_MS = 15_000;
+/** Timeout for a single scroll request to Qdrant. */
+export const QDRANT_SCROLL_TIMEOUT_MS = 10_000;
+
 export interface ChunkPayload {
   session_id: string;
   source_tool: string;
@@ -107,11 +112,12 @@ export function createQdrantClient(
 ): QdrantClient {
   const base = baseUrl.replace(/\/+$/, '');
 
-  async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async function req<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const res = await fetchImpl(`${base}${path}`, {
       method,
       headers: { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
     if (!res.ok) {
       throw new Error(`qdrant ${method} ${path} failed: ${res.status} ${await res.text()}`);
@@ -168,15 +174,20 @@ export function createQdrantClient(
     },
 
     async queryHybrid(dense, sparse, limit, filter) {
-      const body = await req<QdrantQueryResponse>('POST', `/collections/${collection}/points/query`, {
-        prefetch: [
-          { query: dense, using: 'dense', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
-          { query: sparse, using: 'sparse', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
-        ],
-        query: { fusion: 'rrf' },
-        limit,
-        with_payload: true,
-      });
+      const body = await req<QdrantQueryResponse>(
+        'POST',
+        `/collections/${collection}/points/query`,
+        {
+          prefetch: [
+            { query: dense, using: 'dense', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
+            { query: sparse, using: 'sparse', limit: Math.max(limit * 3, 30), filter: qdrantFilter(filter) },
+          ],
+          query: { fusion: 'rrf' },
+          limit,
+          with_payload: true,
+        },
+        AbortSignal.timeout(QDRANT_HYBRID_TIMEOUT_MS),
+      );
       return body.result.points.map((p) => ({
         id: String(p.id),
         score: p.score,
@@ -199,12 +210,17 @@ export function createQdrantClient(
       const out: { id: string; payload: ChunkPayload }[] = [];
       let offset: string | number | null | undefined = undefined;
       for (;;) {
-        const body: QdrantScrollResponse = await req('POST', `/collections/${collection}/points/scroll`, {
-          filter: { must: [{ key: 'session_id', match: { value: sessionId } }] },
-          with_payload: true,
-          limit: 100,
-          offset,
-        });
+        const body: QdrantScrollResponse = await req(
+          'POST',
+          `/collections/${collection}/points/scroll`,
+          {
+            filter: { must: [{ key: 'session_id', match: { value: sessionId } }] },
+            with_payload: true,
+            limit: 100,
+            offset,
+          },
+          AbortSignal.timeout(QDRANT_SCROLL_TIMEOUT_MS),
+        );
         for (const p of body.result.points) {
           out.push({ id: String(p.id), payload: p.payload });
         }
@@ -224,14 +240,19 @@ export function createQdrantClient(
       const PAGE = 100;
       let offset: string | number | null | undefined = undefined;
       for (let page = 0; page < MAX_PAGES; page++) {
-        const body: QdrantScrollResponse = await req('POST', `/collections/${collection}/points/scroll`, {
-          filter: project ? { must: [{ key: 'project', match: { value: project } }] } : undefined,
-          // Project a minimal payload — the bounded scan is the hot path and
-          // each chunk's text/content_hash is irrelevant when listing sessions.
-          with_payload: ['session_id', 'source_tool', 'device', 'project', 'ts'],
-          limit: PAGE,
-          offset,
-        });
+        const body: QdrantScrollResponse = await req(
+          'POST',
+          `/collections/${collection}/points/scroll`,
+          {
+            filter: project ? { must: [{ key: 'project', match: { value: project } }] } : undefined,
+            // Project a minimal payload — the bounded scan is the hot path and
+            // each chunk's text/content_hash is irrelevant when listing sessions.
+            with_payload: ['session_id', 'source_tool', 'device', 'project', 'ts'],
+            limit: PAGE,
+            offset,
+          },
+          AbortSignal.timeout(QDRANT_SCROLL_TIMEOUT_MS),
+        );
         for (const p of body.result.points) {
           const pl = p.payload;
           const agg = seen.get(pl.session_id);
