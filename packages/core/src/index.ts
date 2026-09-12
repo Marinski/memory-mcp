@@ -14,7 +14,16 @@ export { scrubSession, redactWithRules, type ScrubResult } from './ingest/scrub.
 export { ingestFile, ingestInbox, type IngestDeps, type IngestFileResult } from './ingest/pipeline.js';
 export { searchMemory, searchArchive, archiveTimeline, shapeArchiveResults, shapeTimelineResults, type MemoryHit, type ArchiveResult, type TimelineChunk } from './search.js';
 export { forgetByFactId, previewForgetByQuery, executeForgetByQuery, type ForgetPreview, type ForgetOutcome } from './forget.js';
-export { createLlmClient, extractJson, type LlmClient } from './distill/llm.js';
+export {
+  createLlmClient,
+  extractJson,
+  UNTRUSTED_DATA_SUFFIX,
+  LIVE_LLM_TIMEOUT_MS,
+  BATCH_LLM_TIMEOUT_MS,
+  MAX_USER_PROMPT_CHARS,
+  LlmTimeoutError,
+  type LlmClient,
+} from './distill/llm.js';
 export { distillPending, validateProposals, type ProposedFact, type DistillDeps, type DistillReport } from './distill/extract.js';
 export {
   pendingReviews,

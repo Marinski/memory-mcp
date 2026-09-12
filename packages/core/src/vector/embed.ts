@@ -17,6 +17,9 @@ const BATCH = 64;
 // the backend's exact limit.
 const MAX_BATCH_CHARS = 16000;
 
+/** Timeout for a single embedding API call. */
+export const EMBED_TIMEOUT_MS = 30_000;
+
 /** Split into count- and char-budget-bounded batches (a single oversized text goes out alone). */
 function batchTexts(texts: string[]): string[][] {
   const batches: string[][] = [];
@@ -54,6 +57,7 @@ export function createEmbedder(
             authorization: `Bearer ${cfg.aigateApiKey}`,
           },
           body: JSON.stringify({ model: cfg.embedModel, input: batch }),
+          signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
         });
         if (!res.ok) {
           throw new Error(`embeddings request failed: ${res.status} ${await res.text()}`);
