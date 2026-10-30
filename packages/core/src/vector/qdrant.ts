@@ -164,13 +164,31 @@ export function createQdrantClient(
     },
 
     async upsert(points) {
-      await req('PUT', `/collections/${collection}/points?wait=true`, {
-        points: points.map((p) => ({
-          id: p.id,
-          vector: { dense: p.dense, sparse: p.sparse },
-          payload: p.payload,
-        })),
-      });
+      // Qdrant caps a request body (default 32 MiB); a huge session's chunk
+      // batch can exceed it (seen 30 Oct 2026: 168 MB batch). Send in
+      // size-bounded batches.
+      const MAX_BATCH_BYTES = 8 * 1024 * 1024;
+      let batch: typeof points = [];
+      let bytes = 0;
+      const send = async () => {
+        if (!batch.length) return;
+        await req('PUT', `/collections/${collection}/points?wait=true`, {
+          points: batch.map((p) => ({
+            id: p.id,
+            vector: { dense: p.dense, sparse: p.sparse },
+            payload: p.payload,
+          })),
+        });
+        batch = [];
+        bytes = 0;
+      };
+      for (const p of points) {
+        const size = JSON.stringify(p).length;
+        if (bytes + size > MAX_BATCH_BYTES) await send();
+        batch.push(p);
+        bytes += size;
+      }
+      await send();
     },
 
     async queryHybrid(dense, sparse, limit, filter) {
