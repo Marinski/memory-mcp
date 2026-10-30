@@ -11,8 +11,8 @@
 # maintain on this host, not on N remotes across two OSes.
 set -uo pipefail
 
-STAGING=/srv/memory/vscode-dbs
-INBOX=/srv/memory/inbox
+STAGING="${MEMORY_HOME:-/srv/memory}/vscode-dbs"
+INBOX="${MEMORY_HOME:-/srv/memory}/inbox"
 
 REMOTE_RSYNC_HOSTS="${REMOTE_RSYNC_HOSTS:-}"
 REMOTE_SCP_HOSTS="${REMOTE_SCP_HOSTS:-}"

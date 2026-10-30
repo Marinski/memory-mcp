@@ -10,7 +10,7 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 # Postgres
-docker compose -f /srv/memory/deploy/compose.prod.yaml exec -T memory-postgres \
+docker compose -f ${MEMORY_HOME:-/srv/memory}/deploy/compose.prod.yaml exec -T memory-postgres \
   pg_dump -U memory memory | gzip > "$WORKDIR/memory-pg-$STAMP.sql.gz"
 
 # Qdrant snapshot (collection-level, via the existing qdrant container)

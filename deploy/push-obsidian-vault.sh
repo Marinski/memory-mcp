@@ -7,7 +7,7 @@
 # side. Opt-in: no-ops if OBSIDIAN_PUSH_HOST/OBSIDIAN_VAULT_PATH aren't set.
 set -uo pipefail
 
-EXPORT_DIR=/srv/memory/export/vault
+EXPORT_DIR="${MEMORY_HOME:-/srv/memory}/export/vault"
 
 OBSIDIAN_PUSH_HOST="${OBSIDIAN_PUSH_HOST:-}"
 OBSIDIAN_VAULT_PATH="${OBSIDIAN_VAULT_PATH:-}"

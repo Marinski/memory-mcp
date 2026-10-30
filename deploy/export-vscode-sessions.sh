@@ -19,5 +19,5 @@ if [ -z "$LOCAL_DEVICE_NAME" ]; then
   exit 0
 fi
 
-out="/srv/memory/inbox/$LOCAL_DEVICE_NAME/vscode"
+out="${MEMORY_HOME:-/srv/memory}/inbox/$LOCAL_DEVICE_NAME/vscode"
 python3 "$(dirname "$0")/export-vscode-sessions.py" --db "$VSCODE_DB" --out "$out"

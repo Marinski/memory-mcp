@@ -7,7 +7,7 @@
 # duplicating. One host failing does not stop the others.
 set -uo pipefail
 
-INBOX=/srv/memory/inbox
+INBOX="${MEMORY_HOME:-/srv/memory}/inbox"
 
 LOCAL_CLAUDE_DIR="${LOCAL_CLAUDE_DIR:-$HOME/.claude/projects}"
 LOCAL_DEVICE_NAME="${LOCAL_DEVICE_NAME:-}"

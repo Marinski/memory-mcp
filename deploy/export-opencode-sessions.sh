@@ -18,5 +18,5 @@ if [ -z "$LOCAL_DEVICE_NAME" ]; then
   exit 0
 fi
 
-out="/srv/memory/inbox/$LOCAL_DEVICE_NAME/opencode"
+out="${MEMORY_HOME:-/srv/memory}/inbox/$LOCAL_DEVICE_NAME/opencode"
 python3 "$(dirname "$0")/export-opencode-sessions.py" --db "$OPENCODE_DB" --out "$out"
